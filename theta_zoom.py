@@ -1,5 +1,8 @@
 import mne
 import numpy as np
+from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
+plt.ion()
 
 root_dir = "/home/jev/"
 root_dir = "/home/hannaj/"
@@ -52,3 +55,12 @@ for subj in subjs:
         new_raw.add_channels([pp_raw], force_update_info=True)
 
         pow_dat = new_raw.get_data(["F_Power", "P_Power"])
+        prominence = 2.5
+        f_peaks = find_peaks(pow_dat[0,], prominence=prominence)[0]
+        p_peaks = find_peaks(pow_dat[1,], prominence=prominence)[0]
+
+        for fp in f_peaks:
+            new_raw.annotations.append(new_raw.times[fp], 0, "F_peak")
+        for pp in p_peaks:
+            new_raw.annotations.append(new_raw.times[pp], 0, "P_peak")
+        breakpoint()
