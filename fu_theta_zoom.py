@@ -1,11 +1,12 @@
 import mne
 import numpy as np
 from scipy.signal import find_peaks
+from scipy.stats import zscore
 import matplotlib.pyplot as plt
 plt.ion()
 
 root_dir = "/home/jev/"
-root_dir = "/home/hannaj/"
+#root_dir = "/home/hannaj/"
 proc_dir = root_dir + "subcort_loc/proc/"
 
 subjs = ["91", "92", "93"]
@@ -36,6 +37,7 @@ for subj in subjs:
                                             output="complex", return_itc=False,
                                             average=False)
         power = np.abs(tfr).mean(axis=2) * 1e+5
+        power = zscore(power, axis=0)
         phase = np.angle(tfr).mean(axis=2)
         # tiresome work here to put this back in raw format
         power = np.transpose(power, [0, 2, 1])
@@ -55,7 +57,7 @@ for subj in subjs:
         new_raw.add_channels([pp_raw], force_update_info=True)
 
         pow_dat = new_raw.get_data(["F_Power", "P_Power"])
-        prominence = 2.5
+        prominence = 3
         f_peaks = find_peaks(pow_dat[0,], prominence=prominence)[0]
         p_peaks = find_peaks(pow_dat[1,], prominence=prominence)[0]
 
@@ -63,4 +65,32 @@ for subj in subjs:
             new_raw.annotations.append(new_raw.times[fp], 0, "F_peak")
         for pp in p_peaks:
             new_raw.annotations.append(new_raw.times[pp], 0, "P_peak")
-        breakpoint()
+
+        # now find streches with very low theta power for noise cov
+        max_pow = pow_dat.max(axis=0) # max of F and P
+        under_inds = max_pow < 0.5
+        switch_inds = np.where(under_inds[:-1] != under_inds[1:])[0]
+        is_on = under_inds[0]
+        last_idx = 0
+        inds = []
+        for si in switch_inds:
+            if is_on:
+                if (si - last_idx) > int(raw.info["sfreq"] * 2):
+                    inds.append((last_idx, si))
+            last_idx = si
+            is_on = not is_on
+        # annotate
+        # for ind in inds:
+        #     new_raw.annotations.append(new_raw.times[ind[0]],
+        #                                new_raw.times[ind[1]] - new_raw.times[ind[0]],
+        #                                "Valley")
+
+        # crop out
+        raws = []
+        for ind in inds:
+            raws.append(raw.copy().crop(tmin=raw.times[ind[0]],
+                                        tmax=raw.times[ind[1]]))
+        cov_raw = raws[0]
+        cov_raw.append(raws[1:])
+        cov = mne.compute_raw_covariance(cov_raw)
+        cov.save(f"{proc_dir}{subj}_{block}_64-cov.fif")

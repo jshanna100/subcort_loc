@@ -40,14 +40,13 @@ for k, v in zeb2eeg.items():
     if re.match("w[0-9]", k) or re.match("r[0-9]", k):
         last64.append(v)
 
-elec_dict = dict()
-
 zeb_dir = "/home/jev/deepeeg/zebris/"
 proc_dir = "/home/jev/deepeeg/proc/"
 out_dir = "/home/jev/subcort_loc/proc/"
 subjs = ["91", "92", "93"]
 for subj in subjs:
     for zeb_idx, blocks in zip([1, 2], [["A","B"], ["C", "D"]]):
+        elec_dict = dict()
         hsp = []
         zebfile = "{}Geschichte_{}_{}_Geschichte.sfp".format(zeb_dir, subj,
                                                              zeb_idx)
