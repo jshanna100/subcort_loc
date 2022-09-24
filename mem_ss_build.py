@@ -11,8 +11,8 @@ preposts = ["pre", "post"]
 
 subjects_dir = root_dir + "/freesurfer/subjects"
 spacing = "ico5"
-sc_names = ["Left-Hippocampus", "Left-Amygdala", "Right-Hippocampus",
-            "Right-Amygdala"]
+sc_base = ["Caudate", "Putamen", "Hippocampus", "Amygdala"]
+sc_names = [f"Left-{x}" for x in sc_base] +  [f"Right-{x}" for x in sc_base]
 
 for subj in subjs:
     subj_str = f"MT-YG-{subj}"
@@ -36,8 +36,8 @@ for subj in subjs:
         mix_fwd = mne.make_forward_solution(raw.info, trans, mix_src, bem, n_jobs=16)
         mne.write_forward_solution(join(sess_dir,
                                         f"MT-YG-{subj}_Session{sess}-mix-fwd.fif"),
-                                   mix_fwd)
+                                   mix_fwd, overwrite=True)
         ctx_fwd = mne.make_forward_solution(raw.info, trans, src, bem, n_jobs=16)
         mne.write_forward_solution(join(sess_dir,
                                         f"MT-YG-{subj}_Session{sess}-ctx-fwd.fif"),
-                                   ctx_fwd)
+                                   ctx_fwd, overwrite=True)

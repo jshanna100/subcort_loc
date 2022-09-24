@@ -1,5 +1,6 @@
 import mne
 from mne.inverse_sparse import mixed_norm, gamma_map
+from mne.minimum_norm import make_inverse_resolution_matrix as make_res
 from mne.time_frequency import tfr_array_morlet
 from os.path import join
 import numpy as np
@@ -10,45 +11,20 @@ from scipy.stats import circmean
 from circular_hist import circ_hist_norm
 plt.ion()
 
-def principle_angle(v1, v2):
-    v1_u = v1 / np.linalg.norm(v1)
-    v2_u = v2 / np.linalg.norm(v2)
-    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-
-def plot_r(r_norms, r_means, quantiles=(0., .25, .50, .75, 1.)):
-    fig = plt.figure()
-    axes = [plt.subplot(221, projection="polar"),
-            plt.subplot(222, projection="polar"),
-            plt.subplot(223, projection="polar"),
-            plt.subplot(224, projection="polar")]
-    for ax_idx, quant_idx in enumerate(range(len(quantiles)-1)):
-        r_inds = ((r_means > np.quantile(r_means, quantiles[quant_idx])) &
-                  (r_means < np.quantile(r_means, quantiles[quant_idx+1])))
-        these_rs = r_means[r_inds]
-        circ_hist_norm(axes[ax_idx], these_rs)
-
-
-def r_vector(rad):
-    x_bar, y_bar = np.cos(rad).mean(), np.sin(rad).mean()
-    r_mean = circmean(rad, low=-np.pi, high=np.pi)
-    r_norm = np.linalg.norm((x_bar, y_bar))
-    return r_mean, r_norm
-
-def phase_diff(ph_a, ph_b):
-    si = np.exp(1j * np.abs(ph_a - ph_b))
-    return si
+def norm_rm(rm):
+    stack_rm = np.stack((rm[0::3, 0::3], rm[1::3, 1::3], rm[2::3, 2::3]))
+    norm = np.linalg.norm(stack_rm, axis=0)
+    return norm
 
 root_dir = "/home/jev/"
 subjects_dir = join(root_dir, "freesurfer", "subjects")
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
 
-mni_roi_coords = {"LFrontal":np.array([-50, 32, 12]),
-                  "LParietal":np.array([-42, -64, 36]),
-                  "RFrontal":np.array([50, 32, 12]),
-                  "RParietal":np.array([42, -64, 36])}
-roi_cols = {"LFrontal":"red", "LParietal":"green", "RFrontal":"blue",
-            "RParietal":"cyan"}
+snr = 3.0
+lambda2 = 1.0 / snr ** 2
+
+sp_method = mixed_norm
 
 subjs = ["120"]
 sessions = ["2"]
@@ -63,114 +39,90 @@ for subj in subjs:
             sess_dir = join(subj_dir, f"Session{sess}", "EEG")
             epo = mne.read_epochs(join(sess_dir, f"MT-YG-{subj}_{pp}{sess}-epo.fif"),
                                   preload=True)
-            epo.crop(tmin=-.4, tmax=.4)
-            cov = mne.read_cov(join(sess_dir, f"MT-YG-{subj}_{pp}{sess}-cov.fif"))
+            epo.crop(tmin=-.25, tmax=.25)
             ctx_fwd = mne.read_forward_solution(join(sess_dir,
                                                 f"MT-YG-{subj}_Session{sess}-ctx-fwd.fif"))
             mix_fwd = mne.read_forward_solution(join(sess_dir,
                                                 f"MT-YG-{subj}_Session{sess}-mix-fwd.fif"))
 
-            # principle angles
-            # cortex to cortex
-            gain = mix_fwd["sol"]["data"]
-            gain = np.stack((gain[:, 0::3], gain[:, 1::3], gain[:, 2::3]))
-            gain = np.linalg.norm(gain, axis=0)
-            ctx_inds = mix_fwd["src"][0]["nuse"] + mix_fwd["src"][1]["nuse"]
-            sub_inds = ctx_inds + sum([s["nuse"] for s in mix_fwd["src"][2:]])
-            sub_n = sub_inds - ctx_inds
-            rand_ctx_inds = np.random.randint(0, ctx_inds, sub_n)
-            ctx_combs = list(combinations(rand_ctx_inds, 2))
-            ctx_angles = np.zeros(len(ctx_combs))
-            for idx, c_comb in enumerate(ctx_combs):
-                ctx_angles[idx] = principle_angle(gain[:, c_comb[0]],
-                                                  gain[:, c_comb[1]])
-            plt.hist(ctx_angles, bins=100, alpha=0.3)
-            # subcortical to subcortical
-            sub_combs = list(combinations(np.arange(ctx_inds, sub_inds), 2))
-            sub_angles = np.zeros(len(sub_combs))
-            for idx, s_comb in enumerate(sub_combs):
-                sub_angles[idx] = principle_angle(gain[:, s_comb[0]],
-                                                  gain[:, s_comb[1]])
-            plt.hist(sub_angles, bins=100, alpha=0.3)
-            # subcortical to cortical
-            sc_combs = list(product(rand_ctx_inds,
-                                    np.arange(ctx_inds, sub_inds)))
-            sc_combs = [sc_combs[i]
-                        for i in np.random.randint(0, len(sc_combs),
-                                                   len(sub_combs))]
-            sc_angles = np.zeros(len(sc_combs))
-            for idx, sc_comb in enumerate(sc_combs):
-                sc_angles[idx] = principle_angle(gain[:, sc_comb[0]],
-                                                 gain[:, sc_comb[1]])
-            plt.hist(sc_angles, bins=100, alpha=0.3)
-
+            # restrict to sensitive parts of cortex
             sens = mne.sensitivity_map(ctx_fwd, ch_type="eeg")
-            sens.data[sens.data<0.3] = 0
-            lab = mne.stc_to_label(sens, smooth=False,
-                                   subjects_dir=subjects_dir)
-            ctx_fwd = mne.forward.restrict_forward_to_label(ctx_fwd, lab)
-
-            evos = []
-            for e_idx in range(len(epo)):
-                evos.append(epo[e_idx].average())
-            stcs = mixed_norm(evos, ctx_fwd, cov, alpha=50)
-
-            # display constellation of sources
-            brain = stcs[0].plot(subjects_dir=subjects_dir, hemi="both")
-            verts = np.concatenate((stcs[0].lh_vertno, stcs[0].rh_vertno))
-            mni_coords = []
-            for v_idx, v in enumerate(verts):
-                hemi = "lh" if v_idx < len(stcs[0].lh_vertno) else "rh"
-
-                brain.add_foci(v, coords_as_verts=True, color="black", hemi=hemi,
-                               scale_factor=0.5)
-                mni_coords.append(mne.vertex_to_mni(v, hemis.index(hemi),
-                                                    subj_str,
-                                                    subjects_dir=subjects_dir))
-            mni_coords = np.array(mni_coords)
-            # identify foci nearest to MNI coords
-            closest_inds = {}
-            for k,v in mni_roi_coords.items():
-                dists = np.sqrt(np.sum((mni_coords - v)**2, axis=1))
-                closest_idx = np.argmin(dists)
-                closest_inds[k] = closest_idx
-                hemi = "lh" if closest_idx < len(stcs[0].lh_vertno) else "rh"
-                brain.add_foci(verts[closest_idx], coords_as_verts=True,
-                               color=roi_cols[k], hemi=hemi)
-
-            # build sparse, mixed space
-            # all_verts = np.concatenate([s["vertno"] for s in mix_fwd["src"]])
-            # ctx_verts = np.concatenate([s["vertno"] for s in mix_fwd["src"][:2]])
-            # sub_verts = np.concatenate([s["vertno"] for s in mix_fwd["src"][2:]])
-            # ctx_sparse_verts_inds = [np.where(all_verts==v)[0][0]
-            #                          for v in ctx_sparse_verts]
-            # sub_verts_inds = [np.where(all_verts==v)[0][0] for v in sub_verts]
-
-            vert_list = [s["vertno"] for s in mix_fwd["src"]]
-            l_list = np.sort(np.array([closest_inds["LFrontal"],
-                                      closest_inds["LParietal"]]))
-            r_list = np.sort(np.array([closest_inds["RFrontal"],
-                                      closest_inds["RParietal"]]))
-            lr_verts = np.concatenate(stcs[0].vertices)
-            l_list = [lr_verts[v] for v in l_list]
-            r_list = [lr_verts[v] for v in r_list]
-            vert_list[0], vert_list[1] = l_list, r_list
-            stc_data = np.ones(len(np.concatenate(vert_list)))
-            mask_stc = mne.MixedSourceEstimate(stc_data, vert_list, 0, 1,
+            v_n = len(sens.vertices[0])
+            ctx_lh_verts = sens.vertices[0][(sens.data[:v_n]>.3)[:,0]]
+            ctx_rh_verts = sens.vertices[1][(sens.data[v_n:]>.3)[:,0]]
+            sub_verts = [s["vertno"] for s in mix_fwd["src"][2:]]
+            stc_data = np.ones(len(ctx_lh_verts) + len(ctx_rh_verts))
+            temp_stc = mne.SourceEstimate(stc_data,
+                                          [ctx_lh_verts, ctx_rh_verts],
+                                          0, 1, subject=subj_str)
+            ctx_fwd = mne.forward.restrict_forward_to_stc(ctx_fwd, temp_stc)
+            verts = [ctx_lh_verts, ctx_rh_verts]
+            verts.extend(sub_verts)
+            stc_data = np.ones(sum([len(v) for v in verts]))
+            temp_stc = mne.MixedSourceEstimate(stc_data, verts, 0, 1,
                                                subject=subj_str)
-            mask_fwd = mne.forward.restrict_forward_to_stc(mix_fwd, mask_stc)
+            mix_fwd = mne.forward.restrict_forward_to_stc(mix_fwd, temp_stc)
 
-            sp_stcs = mixed_norm(evos, mask_fwd, cov, alpha="sure",
-                                 pick_ori="vector")
+            for frontpar in ["F_peak", "P_peak"]:
+                e = epo[frontpar]
+                cov = mne.compute_covariance(e, keep_sample_mean=False)
+                evo = e.average()
+                # first resolution matrix
+                inv_op = mne.minimum_norm.make_inverse_operator(info=epo.info,
+                                                                forward=mix_fwd,
+                                                                noise_cov=cov,
+                                                                depth=None)
+                rm_big = make_res(mix_fwd, inv_op, method='MNE', lambda2=lambda2)
+                rm_big = norm_rm(rm_big)
 
-            gain = mask_fwd["sol"]["data"]
-            gain = np.stack([gain[:, 0::3], gain[:, 1::3], gain[:, 2::3]])
-            gain = np.linalg.norm(gain, axis=0)
-            src_n = gain.shape[1]
-            sparse_combs = list(combinations(src_n, 2))
-            sparse_mat = np.zeros((src_n, src_n))
-            for sc in sparse_combs:
-                sparse_mat[sc[0], sc[1]] = principle_angle(gain[:, sc[0]],
-                                                           gain[:, sc[1]])
-            plt.imshow(sparse_mat)
-            breakpoint()
+                stc = sp_method(evo, ctx_fwd, cov, alpha=30)
+
+                # display constellation of sources
+                brain = stc.plot(subjects_dir=subjects_dir, hemi="both",
+                                 title=f"{subj} {sess} {pp} {frontpar}")
+                verts = np.concatenate((stc.lh_vertno, stc.rh_vertno))
+                for v_idx, v in enumerate(verts):
+                    hemi = "lh" if v_idx < len(stc.lh_vertno) else "rh"
+                    brain.add_foci(v, coords_as_verts=True, color="black",
+                                   hemi=hemi, scale_factor=0.5)
+                vert_list = [s["vertno"] for s in mix_fwd["src"]]
+                vert_list[0] = stc.lh_vertno
+                vert_list[1] = stc.rh_vertno
+
+                stc_data = np.ones(len(np.concatenate(vert_list)))
+                mask_stc = mne.MixedSourceEstimate(stc_data, vert_list, 0, 1,
+                                                   subject=subj_str)
+                mask_fwd = mne.forward.restrict_forward_to_stc(mix_fwd, mask_stc)
+
+                # sparse cortical resolution matrix
+                inv_op = mne.minimum_norm.make_inverse_operator(info=epo.info,
+                                                                forward=mask_fwd,
+                                                                noise_cov=cov,
+                                                                depth=None)
+                rm_sp_ctx = make_res(mask_fwd, inv_op, method='MNE', lambda2=lambda2)
+                rm_sp_ctx = norm_rm(rm_sp_ctx)
+                plt.figure()
+                plt.imshow(rm_sp_ctx, vmin=-0.05, vmax=0.05)
+                plt.title(f"Sparse cortex {subj} {sess} {pp} {frontpar}")
+
+                sp_stc = sp_method(evo, mask_fwd, cov, alpha=30,
+                                    pick_ori="vector")
+
+
+                # sparse - sparse cortical resolution matrix
+                ## first mask the forward model again
+                verts = sp_stc.vertices
+                stc_data = np.ones(len(np.concatenate(verts)))
+                mask_stc = mne.MixedSourceEstimate(stc_data, verts, 0, 1,
+                                                   subject=subj_str)
+                sp_fwd = mne.forward.restrict_forward_to_stc(mask_fwd, mask_stc)
+                inv_op = mne.minimum_norm.make_inverse_operator(info=epo.info,
+                                                                forward=sp_fwd,
+                                                                noise_cov=cov,
+                                                                depth=None)
+                rm_sp = make_res(sp_fwd, inv_op, method='MNE', lambda2=lambda2)
+                rm_sp = norm_rm(rm_sp)
+                plt.figure()
+                plt.imshow(rm_sp)
+                plt.title(f"Sparse {subj} {sess} {pp} {frontpar}")
+                breakpoint()
