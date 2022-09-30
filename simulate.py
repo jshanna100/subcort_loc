@@ -34,15 +34,24 @@ vol_src = mne.setup_volume_source_space("sample", bem=fname_bem,
 subctx_labels = mne.get_volume_labels_from_src(vol_src, "sample", subjects_dir)
 left_hipp_label = [lab for lab in subctx_labels if lab.name=="Hippocampus-lh"][0]
 
-# Import forward operator and source space
-fwd_fname = join(data_path, 'MEG', subject,
-                 'sample_audvis-meg-eeg-oct-6-fwd.fif')
-fwd = mne.read_forward_solution(fwd_fname)
-src = fwd['src']
 
-mix_src = src + vol_src
-mix_fwd = mne.make_forward_solution(info, trans, mix_src, fname_bem,
-                                    n_jobs=16)
+
+fwd_file = "sample_mix-fwd.fif"
+mix_fwd = mne.read_forward_solution(join("/home", "jev", "temp", fwd_file))
+
+# # Import forward operator and source space
+# fwd_fname = join(data_path, 'MEG', subject,
+#                  'sample_audvis-meg-eeg-oct-6-fwd.fif')
+# fwd = mne.read_forward_solution(fwd_fname)
+# src = fwd['src']
+# fwd_file = "sample_mix-fwd.fif"
+# mix_src = src + vol_src
+# mix_fwd = mne.make_forward_solution(info, trans, mix_src, fname_bem,
+#                                     n_jobs=16)
+# mne.write_forward_solution(join("/home", "jev", "temp", fwd0_file),
+#                            mix_fwd, overwrite=True)
+
+
 
 # To select source, we use the caudal middle frontal to grow
 # a region of interest.
@@ -69,7 +78,7 @@ events[:, 0] = 200 * np.arange(n_events)  # Events sample.
 events[:, 2] = 1  # All events have the sample id.
 
 # Set up simulators
-source_simulator = mne.simulation.SourceSimulator(mix_src, tstep=tstep)
+source_simulator = mne.simulation.SourceSimulator(mix_fwd["src"], tstep=tstep)
 source_simulator.add_data(label_dipole, source_time_series, events)
 
 # Simulate
