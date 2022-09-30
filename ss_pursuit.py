@@ -50,7 +50,7 @@ for subj in subjs:
         fwd0 = mne.read_forward_solution(join(sess_dir, fwd0_file))
         #fwd0 = None
         ss_out, fwd0 = subspace_pursuit(subj_str, ["ico1", "ico2", "ico3"], bem,
-                                        evo, cov, trans, 8, lambda2, fwd0=fwd0,
+                                        evo, cov, trans, 2, lambda2, fwd0=fwd0,
                                         return_fwd0=True, n_jobs=16)
 
         fwd_file = f"MT-YG-{subj}_Session{sess}-ctx-fwd.fif"
@@ -63,6 +63,6 @@ for subj in subjs:
         stc_dspm = apply_inverse(evo, inverse_operator, lambda2=lambda2,
                                  method='dSPM')
         mxne_out = mixed_norm(evo, fwd, cov, weights=stc_dspm,
-                              alpha=10, return_as_dipoles=False)
+                              alpha=90, return_as_dipoles=False)
 
         gamma_out = gamma_map(evo, fwd, cov, 0.1)

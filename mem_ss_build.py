@@ -1,9 +1,12 @@
 import mne
 from os.path import join
+from mne._freesurfer import read_freesurfer_lut
 
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
+
+lut, lut_cols = read_freesurfer_lut()
 
 subjs = ["120"]
 sessions = ["2"]
