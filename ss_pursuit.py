@@ -1,7 +1,9 @@
 import mne
 from os.path import join
 from os import listdir
-from mne.inverse_sparse.subspace_pursuit import subspace_pursuit
+from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
+                                                 make_patch_forward,
+                                                 subspace_pursuit_level)
 from mne.inverse_sparse import mixed_norm, make_stc_from_dipoles, gamma_map
 from mne.minimum_norm import make_inverse_operator, apply_inverse
 import numpy as np
@@ -48,10 +50,21 @@ for subj in subjs:
         evo = epo.average()
         fwd0_file = f"MT-YG-{subj}_Session{sess}_p_ico1-fwd.fif"
         fwd0 = mne.read_forward_solution(join(sess_dir, fwd0_file))
-        #fwd0 = None
-        ss_out, fwd0 = subspace_pursuit(subj_str, ["ico1", "ico2", "ico3"], bem,
-                                        evo, cov, trans, 2, lambda2, fwd0=fwd0,
-                                        return_fwd0=True, n_jobs=16)
+        fwd0 = None
+        ss_out, fwds = subspace_pursuit(subj_str, ["ico1", "ico2"], bem,
+                                        evo, cov, trans, [2, 4], lambda2, fwd0=fwd0,
+                                        return_fwds=True, n_jobs=16)
+
+        # subcortical
+        fwd_sub = make_patch_forward(subj_str, bem, evo.info, trans, volume=True,
+                                     volume_label=sc_names)
+        mix_src = fwds[-1]["src"] + fwd_sub["src"]
+        mix_fwd = mne.make_forward_solution(evo.info, trans, mix_src, bem)
+        mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
+        mix_gain = np.hstack((fwds[-1]["sol"]["data"], fwd_sub["sol"]["data"]))
+        mix_fwd["sol"]["data"] = mix_gain
+        out, est_fwd, var_expl = subspace_pursuit_level(mix_fwd, evo, cov,
+                                                        16, .5, lambda2)
 
         fwd_file = f"MT-YG-{subj}_Session{sess}-ctx-fwd.fif"
         fwd = mne.read_forward_solution(join(sess_dir, fwd_file))

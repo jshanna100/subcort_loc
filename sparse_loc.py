@@ -24,7 +24,8 @@ data_dir = join(root_dir, mem_dir, "02_MemTask")
 snr = 3.0
 lambda2 = 1.0 / snr ** 2
 
-sp_method = mixed_norm
+sp_method = gamma_map
+alpha = 0.2
 
 subjs = ["120"]
 sessions = ["2"]
@@ -75,7 +76,7 @@ for subj in subjs:
                 rm_big = make_res(mix_fwd, inv_op, method='MNE', lambda2=lambda2)
                 rm_big = norm_rm(rm_big)
 
-                stc = sp_method(evo, ctx_fwd, cov, alpha=30)
+                stc = sp_method(evo, ctx_fwd, cov, alpha=alpha)
 
                 # display constellation of sources
                 brain = stc.plot(subjects_dir=subjects_dir, hemi="both",
@@ -104,9 +105,8 @@ for subj in subjs:
                 plt.figure()
                 plt.imshow(rm_sp_ctx, vmin=-0.05, vmax=0.05)
                 plt.title(f"Sparse cortex {subj} {sess} {pp} {frontpar}")
-
-                sp_stc = sp_method(evo, mask_fwd, cov, alpha=30,
-                                    pick_ori="vector")
+                sp_stc = sp_method(evo, mask_fwd, cov, alpha=alpha,
+                                   pick_ori="vector")
 
 
                 # sparse - sparse cortical resolution matrix
