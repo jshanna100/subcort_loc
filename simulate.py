@@ -14,22 +14,29 @@ from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
                                                  subspace_pursuit_level)
 from mne.simulation import simulate_sparse_stc
 
-def generate_osc(freq, length, event_length, n_events, amp, mindist, sfreq):
-    signal = np.zeros(int(length * sfreq))
+def generate_osc(freqs, phases, length, event_length, n_events, amp, mindist,
+                 sfreq):
+    signals = [np.zeros(int(length * sfreq)) for x in range(len(freqs))]
     times = np.linspace(0, event_length, int(event_length * sfreq))
-    e_signal = np.sin(2. * np.pi * freq * times) * amp
-    hanning = np.hanning(len(e_signal))
-    e_signal *= hanning
+    e_signals = []
+    for signal, freq, phase in zip(signals, freqs, phases):
+        e_signal = np.sin(2. * np.pi * freq * times + phase) * amp
+        hanning = np.hanning(len(e_signal))
+        e_signal *= hanning
+        e_signals.append(e_signal)
+    e_signals = np.array(e_signals)
     # generate events
-    events = np.sort(np.random.randint(len(signal), size=n_events))
+    events = np.sort(np.random.randint(len(signals[0]), size=n_events))
     # no events too close together
     dists = events[1:] - events[:-1]
     bad_events = np.where((dists*sfreq) < mindist)[0]
     events = np.delete(events, bad_events+1)
     for eve in events:
-        if (len(signal) - eve) > len(e_signal):
-            signal[eve:eve+len(e_signal)] = e_signal
-    return signal, events
+        if (len(signals[0]) - eve) > len(times):
+            for e_signal in e_signals:
+                signal[eve:eve+len(e_signal)] = e_signal
+    signals = np.array(signals)
+    return signals, events, e_signals
 
 def split_to_vector(series):
     weights = np.random.uniform(size=3)
@@ -59,9 +66,6 @@ vol_src = mne.setup_volume_source_space("sample", bem=fname_bem,
                                         subjects_dir=subjects_dir)
 
 
-# fwd_file = "sample_mix-fwd.fif"
-# mix_fwd = mne.read_forward_solution(join("/home", "jev", "temp", fwd_file))
-#mne.write_forward_solution(join("/home", "jev", "temp", fwd_file), fwds[0])
 
 # # Import forward operator and source space
 fwd_fname = join(data_path, 'MEG', subject,
@@ -90,19 +94,20 @@ ctx_label = mne.read_labels_from_annot(subject,
 sig_len = 900.
 event_n = 150
 amp = 10e-9
-ctx_signal, ctx_events = generate_osc(10., sig_len, 0.5, event_n, amp, 3.,
-                                      info["sfreq"])
-ctx_signal = split_to_vector(ctx_signal)
-subctx_signal, subctx_events = generate_osc(4., sig_len, 0.5, event_n, amp, 3.,
-                                            info["sfreq"])
-subctx_signal = split_to_vector(subctx_signal)
+signals, sig_events, e_signals = generate_osc([6., 12.], [0, np.pi], sig_len,
+                                               0.5, event_n, amp, 3.,
+                                               info["sfreq"])
 
+# split to random vector of 3
+data = []
+for signal in signals:
+    data.append(split_to_vector(signal))
+data = np.swapaxes(np.array(data), 1, 2)
 # Define when the activity occurs using events.
-events = np.zeros((len(ctx_events) + len(subctx_events), 3), int)
-events[:len(ctx_events), 0] = ctx_events
-events[:len(ctx_events), 2] = 1
-events[len(ctx_events):, 0] = subctx_events
-events[len(ctx_events):, 2] = 2
+events = np.zeros((len(sig_events), 3), int)
+events[:len(events), 0] = sig_events
+events[:len(events), 2] = 1
+
 
 # random vertex from each label
 ctx_use_verts = np.intersect1d(mix_src[0]["vertno"], ctx_label.vertices)
@@ -113,7 +118,6 @@ subctx_vtx = np.random.choice(subctx_use_verts, size=1)
 vertices = [np.array([], dtype=int) for s in mix_src]
 vertices[0] = ctx_vtx
 vertices[4] = subctx_vtx
-data = np.stack([ctx_signal.T, subctx_signal.T])
 mix_stc = mne.MixedVectorSourceEstimate(data, vertices=vertices, tmin=0.,
                                         tstep=tstep, subject="sample")
 raw = mne.apply_forward_raw(mix_fwd, mix_stc, info)
@@ -129,29 +133,20 @@ raw_noi.filter(l_freq=1, h_freq=20)
 
 epo = mne.Epochs(raw, events, tmin=0, tmax=0.5, baseline=None)
 evo1 = epo["1"].average()
-evo2 = epo["2"].average()
 
 epo_noi = mne.Epochs(raw_noi, events, tmin=0, tmax=0.5, baseline=None)
 evo1_noi = epo_noi["1"].average()
-evo2_noi = epo_noi["2"].average()
 evo1_noi.set_eeg_reference(projection=True)
-evo2_noi.set_eeg_reference(projection=True)
-
 
 evo = evo1_noi
-vtx = subctx_vtx
-
-# fwd_sub = make_patch_forward("sample", None, fname_bem, evo.info, trans,
-#                              volume=True, volume_label=sc_names)
-
-
+vtx = ctx_vtx
 
 # subspace pursuit
 fwd0_file = "sample_p_ico1-fwd.fif"
 fwd0 = mne.read_forward_solution(join("/home", "jev", "temp", fwd0_file))
 #fwd0 = None
-ss_out, fwds = subspace_pursuit("sample", ["ico1", "ico2", "ico3"], fname_bem,
-                                evo, cov, trans, [1, 1, 1], 1/9, fwd0=fwd0,
+ss_out, fwds = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
+                                evo, cov, trans, [2, 2], 1/9, fwd0=fwd0,
                                 return_as_dipoles=False,
                                 return_fwds=True, n_jobs=16)
 ss_brain = ss_out.plot()
@@ -166,7 +161,7 @@ mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
 mix_gain = np.hstack((fwds[-1]["sol"]["data"], fwd_sub["sol"]["data"]))
 mix_fwd["sol"]["data"] = mix_gain
 out, est_fwd, var_expl = subspace_pursuit_level(mix_fwd, evo, cov,
-                                                1, .5, 1/9)
+                                                2, .5, 1/9)
 breakpoint()
 
 # mixed norm
