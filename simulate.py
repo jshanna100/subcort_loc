@@ -13,6 +13,7 @@ from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
                                                  make_patch_forward,
                                                  subspace_pursuit_level)
 from mne.simulation import simulate_sparse_stc
+from principle_angles import *
 
 def generate_osc(freqs, phases, length, event_length, n_events, amp, mindist,
                  sfreq):
@@ -43,6 +44,8 @@ def split_to_vector(series):
     weights = weights / np.linalg.norm(weights)
     new_series = np.dot(series[:, None], weights[None, :])
     return new_series
+
+root_dir = "/home/hannaj/"
 
 random_state = 42  # set random state to make this example deterministic
 
@@ -76,8 +79,6 @@ fwd_file = "sample_mix-fwd.fif"
 mix_src = src + vol_src
 mix_fwd = mne.make_forward_solution(info, trans, mix_src, fname_bem,
                                     n_jobs=16)
-# mne.write_forward_solution(join("/home", "jev", "temp", fwd0_file),
-#                            mix_fwd, overwrite=True)
 
 mix_src = mix_fwd["src"]
 
@@ -143,18 +144,24 @@ vtx = ctx_vtx
 
 # subspace pursuit
 fwd0_file = "sample_p_ico1-fwd.fif"
-fwd0 = mne.read_forward_solution(join("/home", "jev", "temp", fwd0_file))
+fwd0 = mne.read_forward_solution(join(root_dir, "temp", fwd0_file))
 #fwd0 = None
 ss_out, fwds = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
                                 evo, cov, trans, [2, 2], 1/9, fwd0=fwd0,
                                 return_as_dipoles=False,
+                                subjects_dir=subjects_dir,
                                 return_fwds=True, n_jobs=16)
-ss_brain = ss_out.plot()
+
+ss_brain = ss_out.plot(subjects_dir=subjects_dir)
 ss_brain.add_foci(vtx, coords_as_verts=True)
+
+# mne.write_forward_solution(join(root_dir, "temp", fwd0_file),
+#                            fwds[0], overwrite=True)
 
 # subcortical
 fwd_sub = make_patch_forward("sample", None, fname_bem, evo.info, trans,
-                             volume=True, volume_label=sc_names)
+                             volume=True, volume_label=sc_names,
+                             subjects_dir=subjects_dir, n_jobs=16)
 mix_src = fwds[-1]["src"] + fwd_sub["src"]
 mix_fwd = mne.make_forward_solution(evo.info, trans, mix_src, fname_bem)
 mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
@@ -162,24 +169,29 @@ mix_gain = np.hstack((fwds[-1]["sol"]["data"], fwd_sub["sol"]["data"]))
 mix_fwd["sol"]["data"] = mix_gain
 out, est_fwd, var_expl = subspace_pursuit_level(mix_fwd, evo, cov,
                                                 2, .5, 1/9)
-breakpoint()
 
-# mixed norm
-loose, depth = 0.9, 0.9
-inverse_operator = make_inverse_operator(evo.info, fwd, cov,
-                                         depth=depth, fixed=True,
-                                         use_cps=True)
-stc_dspm = apply_inverse(evo, inverse_operator, lambda2=1. / 9.,
-                         method='dSPM')
-mxne_out = mixed_norm(evo, fwd, cov, weights=stc_dspm,
-                      alpha=50, return_as_dipoles=True)
-mxne_stc = make_stc_from_dipoles(mxne_out, fwd["src"])
-mxne_brain = mxne_stc.plot()
-mxne_brain.add_foci(vtx, coords_as_verts=True)
-#
-# gamma map
-gamma_out = gamma_map(evo, fwd, cov, 0.05, xyz_same_gamma=True,
-                      return_as_dipoles=True)
-gamma_stc = make_stc_from_dipoles(gamma_out, fwd["src"])
-gamma_brain = gamma_stc.plot()
-gamma_brain.add_foci(vtx, coords_as_verts=True)
+angle_mat = gain_angle_on_gain(fwd0["sol"]["data"], fwd_sub["sol"]["data"])
+min_angle = angle_mat.min(axis=1)
+# build source estimate for display
+vertices = [s["vertno"] for s in fwd0["src"]]
+ang_stc = mne.SourceEstimate(min_angle[None,], vertices, 0, 0.001)
+
+# # mixed norm
+# loose, depth = 0.9, 0.9
+# inverse_operator = make_inverse_operator(evo.info, fwd, cov,
+#                                          depth=depth, fixed=True,
+#                                          use_cps=True)
+# stc_dspm = apply_inverse(evo, inverse_operator, lambda2=1. / 9.,
+#                          method='dSPM')
+# mxne_out = mixed_norm(evo, fwd, cov, weights=stc_dspm,
+#                       alpha=50, return_as_dipoles=True)
+# mxne_stc = make_stc_from_dipoles(mxne_out, fwd["src"])
+# mxne_brain = mxne_stc.plot(subjects_dir=subjects_dir)
+# mxne_brain.add_foci(vtx, coords_as_verts=True)
+# #
+# # gamma map
+# gamma_out = gamma_map(evo, fwd, cov, 0.05, xyz_same_gamma=True,
+#                       return_as_dipoles=True)
+# gamma_stc = make_stc_from_dipoles(gamma_out, fwd["src"])
+# gamma_brain = gamma_stc.plot(subjects_dir=subjects_dir)
+# gamma_brain.add_foci(vtx, coords_as_verts=True)

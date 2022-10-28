@@ -1,35 +1,17 @@
+import numpy as np
+from itertools import product
+
 def principle_angle(v1, v2):
     v1_u = v1 / np.linalg.norm(v1)
     v2_u = v2 / np.linalg.norm(v2)
-    return np.rad2deg(np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0)))
+    return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
-# principle angles
-## cortex to cortex
-gain = fwd["sol"]["data"]
-# gain = np.stack((gain[:, 0::3], gain[:, 1::3], gain[:, 2::3]))
-# gain = np.linalg.norm(gain, axis=0)
-ctx_inds = gain.shape[1]
-ctx_combs = list(combinations(np.arange(ctx_inds), 2))
-ctx_angles = np.zeros(len(ctx_combs))
-for idx, c_comb in enumerate(ctx_combs):
-    ctx_angles[idx] = principle_angle(gain[:, c_comb[0]],
-                                      gain[:, c_comb[1]])
-plt.hist(ctx_angles, bins=100, alpha=0.3)
-## subcortical to subcortical
-sub_combs = list(combinations(np.arange(ctx_inds, sub_inds), 2))
-sub_angles = np.zeros(len(sub_combs))
-for idx, s_comb in enumerate(sub_combs):
-    sub_angles[idx] = principle_angle(gain[:, s_comb[0]],
-                                      gain[:, s_comb[1]])
-plt.hist(sub_angles, bins=100, alpha=0.3)
-## subcortical to cortical
-sc_combs = list(product(rand_ctx_inds,
-                        np.arange(ctx_inds, sub_inds)))
-sc_combs = [sc_combs[i]
-            for i in np.random.randint(0, len(sc_combs),
-                                       len(sub_combs))]
-sc_angles = np.zeros(len(sc_combs))
-for idx, sc_comb in enumerate(sc_combs):
-    sc_angles[idx] = principle_angle(gain[:, sc_comb[0]],
-                                     gain[:, sc_comb[1]])
-plt.hist(sc_angles, bins=100, alpha=0.3)
+def principle_angle_mat(m1, m2):
+    m1 = m1 / np.linalg.norm(m1, axis=0)
+    m2 = m2 / np.linalg.norm(m2, axis=0)
+    angle_mat = np.arccos(np.clip(np.matmul(m1.T, m2), -1., 1.))
+    return angle_mat
+
+def gain_angle_on_gain(gain_to, gain_from):
+    pangle_mat = principle_angle_mat(gain_to, gain_from)
+    return pangle_mat
