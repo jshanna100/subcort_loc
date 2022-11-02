@@ -1,6 +1,11 @@
 from os import listdir
 from os.path import join
 
+"""
+Fix the brainsight files so they can be more easily read by MNE-Python
+"""
+
+
 root_dir = "/home/jev/"
 data_dir = join(root_dir, "hdd/memtacs/pilot/01_BrainSight")
 filenames = listdir(data_dir)

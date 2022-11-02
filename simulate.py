@@ -46,8 +46,9 @@ def split_to_vector(series):
     return new_series
 
 root_dir = "/home/hannaj/"
-
+root_dir = "/home/jev/"
 random_state = 42  # set random state to make this example deterministic
+angle_coef = .8
 
 # Import sample data
 data_path = sample.data_path()
@@ -95,9 +96,12 @@ ctx_label = mne.read_labels_from_annot(subject,
 sig_len = 900.
 event_n = 150
 amp = 10e-9
-signals, sig_events, e_signals = generate_osc([6., 12.], [0, np.pi], sig_len,
+signals, sig_events, e_signals = generate_osc([6., 10.], [0, np.pi], sig_len,
                                                0.5, event_n, amp, 3.,
                                                info["sfreq"])
+# signals, sig_events, e_signals = generate_osc([12.], [np.pi], sig_len,
+#                                                0.5, event_n, amp, 3.,
+#                                                info["sfreq"])
 
 # split to random vector of 3
 data = []
@@ -146,9 +150,20 @@ vtx = ctx_vtx
 fwd0_file = "sample_p_ico1-fwd.fif"
 fwd0 = mne.read_forward_solution(join(root_dir, "temp", fwd0_file))
 #fwd0 = None
+
+fwd_sub = make_patch_forward("sample", None, fname_bem, evo.info, trans,
+                             volume=True, volume_label=sc_names,
+                             subjects_dir=subjects_dir, n_jobs=16)
+#angle_mat = gain_angle_on_gain(fwd0["sol"]["data"], fwd_sub["sol"]["data"])
+angle_mat = np.matmul(fwd0["sol"]["data"].T, fwd_sub["sol"]["data"])
+min_angle = np.linalg.norm(angle_mat, axis=-1) ** -0.5
+# build source estimate for display
+vertices = [s["vertno"] for s in fwd0["src"]]
+ang_stc = mne.SourceEstimate(min_angle, vertices, 0, 0.001)
+
 ss_out, fwds = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
                                 evo, cov, trans, [2, 2], 1/9, fwd0=fwd0,
-                                return_as_dipoles=False,
+                                return_as_dipoles=False, weights=min_angle,
                                 subjects_dir=subjects_dir,
                                 return_fwds=True, n_jobs=16)
 
@@ -170,11 +185,6 @@ mix_fwd["sol"]["data"] = mix_gain
 out, est_fwd, var_expl = subspace_pursuit_level(mix_fwd, evo, cov,
                                                 2, .5, 1/9)
 
-angle_mat = gain_angle_on_gain(fwd0["sol"]["data"], fwd_sub["sol"]["data"])
-min_angle = angle_mat.min(axis=1)
-# build source estimate for display
-vertices = [s["vertno"] for s in fwd0["src"]]
-ang_stc = mne.SourceEstimate(min_angle[None,], vertices, 0, 0.001)
 
 # # mixed norm
 # loose, depth = 0.9, 0.9

@@ -12,6 +12,7 @@ def principle_angle_mat(m1, m2):
     angle_mat = np.arccos(np.clip(np.matmul(m1.T, m2), -1., 1.))
     return angle_mat
 
+
 def gain_angle_on_gain(gain_to, gain_from):
     pangle_mat = principle_angle_mat(gain_to, gain_from)
     return pangle_mat

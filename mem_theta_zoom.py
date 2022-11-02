@@ -6,6 +6,11 @@ from scipy.stats import zscore
 import matplotlib.pyplot as plt
 plt.ion()
 
+"""
+Identifies bursts of theta activity in frontal and parietal channels and
+isolates them into epochs
+"""
+
 def phase_align(peaks, phase, win_ind):
     new_peaks = []
     win_half = win_ind//2
@@ -36,9 +41,8 @@ for subj in subjs:
                              preload=True)
             all_chans = raw.ch_names
             raw.set_eeg_reference(projection=True) # average reference
-            #raw.set_channel_types({x:"eeg" for x in chck_chans})
             raw.filter(l_freq=4, h_freq=6.5, picks=raw.ch_names) # theta band
-            # create frontal/parietal summary channels, centro-lateral for counterindication
+            # create frontal/parietal summary channels
             front_data = raw.get_data(picks=frontal_chans).mean(axis=0, keepdims=True)
             parietal_data = raw.get_data(picks=parietal_chans).mean(axis=0, keepdims=True)
             data = np.vstack([front_data, parietal_data])
@@ -46,13 +50,16 @@ for subj in subjs:
                                    raw.info["sfreq"], ch_types="eeg")
             new_raw = mne.io.RawArray(data, info)
             epo = mne.make_fixed_length_epochs(new_raw, 10)
+            # calculate TFRs to see when theta power is strongest
+            # we choose complex output so we can calculate both power and
+            # instantaneous phase
             tfr = mne.time_frequency.tfr_morlet(epo, [4, 4.5, 5, 5.5, 6, 6.5], 3,
                                                 output="complex", return_itc=False,
                                                 average=False)
             power = np.abs(tfr).mean(axis=2) * 1e+5
             power = zscore(power, axis=0)
             phase = np.angle(tfr).mean(axis=2)
-            # tiresome work here to put this back in raw format
+            # tiresome work here to put the matrix back in raw format
             power = np.transpose(power, [0, 2, 1])
             power = power.reshape(power.shape[0] * power.shape[1], power.shape[2])
             power = np.transpose(power, [1, 0])
@@ -60,6 +67,7 @@ for subj in subjs:
             phase = phase.reshape(phase.shape[0] * phase.shape[1], phase.shape[2])
             phase = np.transpose(phase, [1, 0])
 
+            # phase synchronisation between frontal and parietal
             fp_sync = 1 - np.sin(np.abs(phase[0,] - phase[1,])/2)[None,]
             info = mne.create_info(["F_Power", "P_Power",
                                     "F_Phase", "P_Phase", "FP_Sync"],
@@ -67,8 +75,11 @@ for subj in subjs:
             pp_raw = mne.io.RawArray(np.concatenate([power, phase, fp_sync], axis=0),
                                      info)
             new_raw.crop(tmin=0, tmax=pp_raw.times[-1])
+            # new_raw now contains phase, power and synchronisation next
+            # to the original eeg data
             new_raw.add_channels([pp_raw], force_update_info=True)
 
+            # identify and annotate peaks in power
             pow_dat = new_raw.get_data(["F_Power", "P_Power"])
             prominence = 3
             win_ind = raw.time_as_index(.25)[0]
@@ -82,32 +93,7 @@ for subj in subjs:
             for p in p_peaks:
                 new_raw.annotations.append(new_raw.times[p], 0, "P_peak")
 
-
-            # # now find streches with very low theta power for noise cov
-            # max_pow = pow_dat.max(axis=0) # max of F and P
-            # under_inds = max_pow < 0.5
-            # switch_inds = np.where(under_inds[:-1] != under_inds[1:])[0]
-            # is_on = under_inds[0]
-            # last_idx = 0
-            # inds = []
-            # for si in switch_inds:
-            #     if is_on:
-            #         if (si - last_idx) > int(raw.info["sfreq"] * 2):
-            #             inds.append((last_idx, si))
-            #     last_idx = si
-            #     is_on = not is_on
-            #
-            # # crop out
-            # raws = []
-            # for ind in inds:
-            #     raws.append(raw.copy().crop(tmin=raw.times[ind[0]],
-            #                                 tmax=raw.times[ind[1]]))
-            # cov_raw = raws[0]
-            # cov_raw.append(raws[1:])
-            # cov = mne.compute_raw_covariance(cov_raw.copy().apply_proj())
-            # cov.save(join(sess_dir, f"MT-YG-{subj}_{pp}{sess}-cov.fif"),
-            #          overwrite=True)
-
+            # finally epoch all theta events
             events = mne.events_from_annotations(new_raw)
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
                              event_repeated="merge")

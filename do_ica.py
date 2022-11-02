@@ -1,5 +1,9 @@
 import mne
 from os.path import join
+'''
+Clean ocular artefacts with ICA
+'''
+
 
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
