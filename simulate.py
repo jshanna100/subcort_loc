@@ -16,10 +16,13 @@ from mne.simulation import simulate_sparse_stc
 from principle_angles import *
 
 def generate_osc(freqs, phases, length, event_length, n_events, amp, mindist,
-                 sfreq):
+                 sfreq, jitters=None):
     signals = [np.zeros(int(length * sfreq)) for x in range(len(freqs))]
     times = np.linspace(0, event_length, int(event_length * sfreq))
     e_signals = []
+    if jitters is None:
+        jitters = [0 for x in range(len(signals))]
+    # e signals are the canonical signals without jitter
     for signal, freq, phase in zip(signals, freqs, phases):
         e_signal = np.sin(2. * np.pi * freq * times + phase) * amp
         hanning = np.hanning(len(e_signal))
@@ -34,8 +37,12 @@ def generate_osc(freqs, phases, length, event_length, n_events, amp, mindist,
     events = np.delete(events, bad_events+1)
     for eve in events:
         if (len(signals[0]) - eve) > len(times):
-            for e_signal in e_signals:
-                signal[eve:eve+len(e_signal)] = e_signal
+            for signal, freq, phase, jitter in zip(signals, freqs, phases, jitters):
+                jitter = 2 * jitter * np.random.random_sample() - jitter
+                this_signal = np.sin(2. * np.pi * freq * times + phase + jitter) * amp
+                hanning = np.hanning(len(this_signal))
+                this_signal *= hanning
+                signal[eve:eve+len(e_signal)] = this_signal
     signals = np.array(signals)
     return signals, events, e_signals
 
@@ -88,20 +95,29 @@ subctx_labels = mne.get_volume_labels_from_src(mix_src, "sample", subjects_dir)
 subctx_label = [lab for lab in subctx_labels if lab.name=="Hippocampus-lh"][0]
 
 # cortical label
-ctx_label = mne.read_labels_from_annot(subject,
-                                       regexp='caudalmiddlefrontal-lh',
-                                       subjects_dir=subjects_dir)[0]
+ctx_labels = []
+ctx_labels.append(mne.read_labels_from_annot(subject,
+                                             regexp='rostralmiddlefrontal-lh',
+                                             subjects_dir=subjects_dir)[0])
+ctx_labels.append(mne.read_labels_from_annot(subject,
+                                             regexp='inferiorparietal-lh',
+                                             subjects_dir=subjects_dir)[0])
 
 # Define the time course of the activity
 sig_len = 900.
 event_n = 150
 amp = 10e-9
-signals, sig_events, e_signals = generate_osc([6., 10.], [0, np.pi], sig_len,
-                                               0.5, event_n, amp, 3.,
-                                               info["sfreq"])
-# signals, sig_events, e_signals = generate_osc([12.], [np.pi], sig_len,
-#                                                0.5, event_n, amp, 3.,
-#                                                info["sfreq"])
+# signals, sig_events, e_signals = generate_osc([6., 6., 6.], [0, np.pi/2, np.pi/2],
+#                                               sig_len, 0.5, event_n, amp, 3.,
+#                                               info["sfreq"],
+#                                               jitters=[np.pi/16,
+#                                                        np.pi/16,
+#                                                        np.pi/16])
+signals, sig_events, e_signals = generate_osc([6., 6.,], [0, np.pi/2],
+                                              sig_len, 0.5, event_n, amp, 3.,
+                                              info["sfreq"],
+                                              jitters=[np.pi/16,
+                                                       np.pi/16])
 
 # split to random vector of 3
 data = []
@@ -115,14 +131,18 @@ events[:len(events), 2] = 1
 
 
 # random vertex from each label
-ctx_use_verts = np.intersect1d(mix_src[0]["vertno"], ctx_label.vertices)
-ctx_vtx = np.random.choice(ctx_use_verts, size=1)
+ctx_verts = []
+for ctx_label in ctx_labels:
+    ctx_use_verts = np.intersect1d(mix_src[0]["vertno"], ctx_label.vertices)
+    ctx_verts.append(np.random.choice(ctx_use_verts))
+ctx_verts = np.array(ctx_verts)
+ctx_verts.sort()
 subctx_use_verts = np.intersect1d(mix_src[4]["vertno"], subctx_label.vertices)
 subctx_vtx = np.random.choice(subctx_use_verts, size=1)
 
 vertices = [np.array([], dtype=int) for s in mix_src]
-vertices[0] = ctx_vtx
-vertices[4] = subctx_vtx
+vertices[0] = ctx_verts
+#vertices[4] = subctx_vtx
 mix_stc = mne.MixedVectorSourceEstimate(data, vertices=vertices, tmin=0.,
                                         tstep=tstep, subject="sample")
 raw = mne.apply_forward_raw(mix_fwd, mix_stc, info)
@@ -132,8 +152,7 @@ raw.pick_types(eeg=True)
 # Simulate
 cov = mne.read_cov(cov_fname)
 raw_noi = raw.copy()
-mne.simulation.add_noise(raw_noi, cov)#, iir_filter=[0.2, -0.2, 0.04],
-                         #random_state=random_state)
+mne.simulation.add_noise(raw_noi, cov)
 raw_noi.filter(l_freq=1, h_freq=20)
 
 epo = mne.Epochs(raw, events, tmin=0, tmax=0.5, baseline=None)
@@ -141,58 +160,69 @@ evo1 = epo["1"].average()
 
 epo_noi = mne.Epochs(raw_noi, events, tmin=0, tmax=0.5, baseline=None)
 evo1_noi = epo_noi["1"].average()
-evo1_noi.set_eeg_reference(projection=True)
 
-evo = evo1_noi
-vtx = ctx_vtx
+
+snr = 0.8
+lambda2 = 1. / snr ** 2
+inst = epo_noi
+inst.set_eeg_reference(projection=True)
+
+cnx = {"method":"wpli", "fmin":5, "fmax":7, "sfreq":inst.info["sfreq"]}
+#cnx = None
 
 # subspace pursuit
 fwd0_file = "sample_p_ico1-fwd.fif"
 fwd0 = mne.read_forward_solution(join(root_dir, "temp", fwd0_file))
 #fwd0 = None
 
-fwd_sub = make_patch_forward("sample", None, fname_bem, evo.info, trans,
+sub_fwd = make_patch_forward("sample", None, fname_bem, inst.info, trans,
                              volume=True, volume_label=sc_names,
                              subjects_dir=subjects_dir, n_jobs=16)
-#angle_mat = gain_angle_on_gain(fwd0["sol"]["data"], fwd_sub["sol"]["data"])
-angle_mat = np.matmul(fwd0["sol"]["data"].T, fwd_sub["sol"]["data"])
-min_angle = np.linalg.norm(angle_mat, axis=-1) ** -0.5
-# build source estimate for display
-vertices = [s["vertno"] for s in fwd0["src"]]
-ang_stc = mne.SourceEstimate(min_angle, vertices, 0, 0.001)
+ss_out, fwds, resid = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
+                                       inst, cov, trans, [1, 1], lambda2,
+                                       fwd0=fwd0, return_as_dipoles=False,
+                                       subjects_dir=subjects_dir, mu=.25,
+                                       sub_fwd=sub_fwd, sub_mu=.8, cnx=cnx,
+                                       return_fwds=True, n_jobs=16,
+                                       patch_comp_n=1)
 
-ss_out, fwds = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
-                                evo, cov, trans, [2, 2], 1/9, fwd0=fwd0,
-                                return_as_dipoles=False, weights=min_angle,
-                                subjects_dir=subjects_dir,
-                                return_fwds=True, n_jobs=16)
+this_ss = ss_out[0].copy() if isinstance(ss_out, tuple) else ss_out.copy()
 
-ss_brain = ss_out.plot(subjects_dir=subjects_dir)
-ss_brain.add_foci(vtx, coords_as_verts=True)
+out_d = [ss.data.copy() for ss in ss_out]
+out_d = np.array(out_d).mean(axis=0)
+out = this_ss
+out.data = out_d
+
+ss_brain = out.plot(subjects_dir=subjects_dir)
+for vtx in ctx_verts:
+    ss_brain.add_foci(vtx, coords_as_verts=True)
 
 # mne.write_forward_solution(join(root_dir, "temp", fwd0_file),
 #                            fwds[0], overwrite=True)
 
 # subcortical
-fwd_sub = make_patch_forward("sample", None, fname_bem, evo.info, trans,
-                             volume=True, volume_label=sc_names,
-                             subjects_dir=subjects_dir, n_jobs=16)
-mix_src = fwds[-1]["src"] + fwd_sub["src"]
-mix_fwd = mne.make_forward_solution(evo.info, trans, mix_src, fname_bem)
-mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
-mix_gain = np.hstack((fwds[-1]["sol"]["data"], fwd_sub["sol"]["data"]))
-mix_fwd["sol"]["data"] = mix_gain
-out, est_fwd, var_expl = subspace_pursuit_level(mix_fwd, evo, cov,
-                                                2, .5, 1/9)
+# mix_src = fwds[-1]["src"] + sub_fwd["src"]
+# mix_fwd = mne.make_forward_solution(inst.info, trans, mix_src, fname_bem)
+# mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
+# mix_gain = np.hstack((fwds[-1]["sol"]["data"], sub_fwd["sol"]["data"]))
+# mix_fwd["sol"]["data"] = mix_gain
+# out, est_fwd, var_expl, resid = subspace_pursuit_level(mix_fwd, inst, cov,
+#                                                        3, .5, lambda2)
 
+plt.ion()
+plt.figure()
+plt.plot(out.data.T)
+plt.figure()
+plt.plot(e_signals.T)
 
-# # mixed norm
-# loose, depth = 0.9, 0.9
+# mixed norm
+# loose, depth = 0, None
 # inverse_operator = make_inverse_operator(evo.info, fwd, cov,
 #                                          depth=depth, fixed=True,
 #                                          use_cps=True)
-# stc_dspm = apply_inverse(evo, inverse_operator, lambda2=1. / 9.,
-#                          method='dSPM')
+# stc_mne = apply_inverse(evo, inverse_operator, lambda2=1.,
+#                          method='MNE')
+
 # mxne_out = mixed_norm(evo, fwd, cov, weights=stc_dspm,
 #                       alpha=50, return_as_dipoles=True)
 # mxne_stc = make_stc_from_dipoles(mxne_out, fwd["src"])

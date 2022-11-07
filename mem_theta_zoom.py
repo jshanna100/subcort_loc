@@ -97,5 +97,6 @@ for subj in subjs:
             events = mne.events_from_annotations(new_raw)
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
                              event_repeated="merge")
+            breakpoint()
             epo.save(join(sess_dir, f"MT-YG-{subj}_{pp}{sess}-epo.fif"),
                      overwrite=True)
