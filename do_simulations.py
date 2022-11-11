@@ -108,6 +108,10 @@ elif method == "ss":
     data = np.mean([cs.data for cs in ctx_stc], axis=0)
     plt.plot(data.T)
 
+    plt.figure()
+    data = np.mean([cs.data for cs in mix_stc], axis=0)
+    plt.plot(data.T)
+
 # ss_brain = stc.plot(subjects_dir=subjects_dir)
 # for vtx in ctx_verts:
 #     ss_brain.add_foci(vtx, coords_as_verts=True, color="red", alpha=0.3)
