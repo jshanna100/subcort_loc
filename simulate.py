@@ -3,12 +3,15 @@
 # License: BSD (3-clause)
 import numpy as np
 import matplotlib.pyplot as plt
+plt.ion()
 from functools import partial
 from os.path import join
 import mne
+from mne.source_space import _set_source_space_vertices
 from mne.datasets import sample
 from mne.minimum_norm import make_inverse_operator, apply_inverse
-from mne.inverse_sparse import gamma_map, mixed_norm, make_stc_from_dipoles
+from mne.inverse_sparse import (gamma_map, mixed_norm, make_stc_from_dipoles,
+                                tf_mixed_norm)
 from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
                                                  make_patch_forward,
                                                  subspace_pursuit_level)
@@ -88,7 +91,6 @@ mix_src = src + vol_src
 mix_fwd = mne.make_forward_solution(info, trans, mix_src, fname_bem,
                                     n_jobs=16)
 
-mix_src = mix_fwd["src"]
 
 # subcortical labels
 subctx_labels = mne.get_volume_labels_from_src(mix_src, "sample", subjects_dir)
@@ -107,17 +109,17 @@ ctx_labels.append(mne.read_labels_from_annot(subject,
 sig_len = 900.
 event_n = 150
 amp = 10e-9
-# signals, sig_events, e_signals = generate_osc([6., 6., 6.], [0, np.pi/2, np.pi/2],
-#                                               sig_len, 0.5, event_n, amp, 3.,
-#                                               info["sfreq"],
-#                                               jitters=[np.pi/16,
-#                                                        np.pi/16,
-#                                                        np.pi/16])
-signals, sig_events, e_signals = generate_osc([6., 6.,], [0, np.pi/2],
+signals, sig_events, e_signals = generate_osc([6., 6., 6.], [0, 0, np.pi/2],
                                               sig_len, 0.5, event_n, amp, 3.,
                                               info["sfreq"],
                                               jitters=[np.pi/16,
+                                                       np.pi/16,
                                                        np.pi/16])
+# signals, sig_events, e_signals = generate_osc([6., 6.,], [0, 0],
+#                                               sig_len, 0.5, event_n, amp, 3.,
+#                                               info["sfreq"],
+#                                               jitters=[np.pi/16,
+#                                                        np.pi/16])
 
 # split to random vector of 3
 data = []
@@ -142,7 +144,7 @@ subctx_vtx = np.random.choice(subctx_use_verts, size=1)
 
 vertices = [np.array([], dtype=int) for s in mix_src]
 vertices[0] = ctx_verts
-#vertices[4] = subctx_vtx
+vertices[4] = subctx_vtx
 mix_stc = mne.MixedVectorSourceEstimate(data, vertices=vertices, tmin=0.,
                                         tstep=tstep, subject="sample")
 raw = mne.apply_forward_raw(mix_fwd, mix_stc, info)
@@ -164,38 +166,41 @@ evo1_noi = epo_noi["1"].average()
 
 snr = 0.8
 lambda2 = 1. / snr ** 2
-inst = epo_noi
+inst = evo1_noi
 inst.set_eeg_reference(projection=True)
+cov = cov.pick_channels(inst.ch_names)
 
-cnx = {"method":"wpli", "fmin":5, "fmax":7, "sfreq":inst.info["sfreq"]}
-#cnx = None
-
-# subspace pursuit
-fwd0_file = "sample_p_ico1-fwd.fif"
-fwd0 = mne.read_forward_solution(join(root_dir, "temp", fwd0_file))
-#fwd0 = None
-
-sub_fwd = make_patch_forward("sample", None, fname_bem, inst.info, trans,
-                             volume=True, volume_label=sc_names,
-                             subjects_dir=subjects_dir, n_jobs=16)
-ss_out, fwds, resid = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
-                                       inst, cov, trans, [1, 1], lambda2,
-                                       fwd0=fwd0, return_as_dipoles=False,
-                                       subjects_dir=subjects_dir, mu=.25,
-                                       sub_fwd=sub_fwd, sub_mu=.8, cnx=cnx,
-                                       return_fwds=True, n_jobs=16,
-                                       patch_comp_n=1)
-
-this_ss = ss_out[0].copy() if isinstance(ss_out, tuple) else ss_out.copy()
-
-out_d = [ss.data.copy() for ss in ss_out]
-out_d = np.array(out_d).mean(axis=0)
-out = this_ss
-out.data = out_d
-
-ss_brain = out.plot(subjects_dir=subjects_dir)
-for vtx in ctx_verts:
-    ss_brain.add_foci(vtx, coords_as_verts=True)
+# cnx = {"method":"wpli", "fmin":5, "fmax":7, "sfreq":inst.info["sfreq"]}
+# #cnx = None
+#
+# # subspace pursuit
+# fwd0_file = "sample_p_ico1-fwd.fif"
+# fwd0 = mne.read_forward_solution(join(root_dir, "temp", fwd0_file))
+# #fwd0 = None
+#
+# sub_fwd = make_patch_forward("sample", None, fname_bem, inst.info, trans,
+#                              volume=True, volume_label=sc_names,
+#                              subjects_dir=subjects_dir, n_jobs=16)
+# sub_fwd_file = "sample_sub-fwd.fif"
+# sub_fwd = mne.read_forward_solution(join(root_dir, "temp", sub_fwd_file))
+# ss_out, fwds, resid = subspace_pursuit("sample", ["ico1", "ico2"], fname_bem,
+#                                        inst, cov, trans, [1, 1], lambda2,
+#                                        fwd0=fwd0, return_as_dipoles=False,
+#                                        subjects_dir=subjects_dir, mu=.25,
+#                                        sub_fwd=sub_fwd, sub_mu=.8, cnx=cnx,
+#                                        return_fwds=True, n_jobs=16,
+#                                        patch_comp_n=1)
+#
+# this_ss = ss_out[0].copy() if isinstance(ss_out, tuple) else ss_out.copy()
+#
+# out_d = [ss.data.copy() for ss in ss_out]
+# out_d = np.array(out_d).mean(axis=0)
+# out = this_ss
+# out.data = out_d
+#
+# ss_brain = out.plot(subjects_dir=subjects_dir)
+# for vtx in ctx_verts:
+#     ss_brain.add_foci(vtx, coords_as_verts=True)
 
 # mne.write_forward_solution(join(root_dir, "temp", fwd0_file),
 #                            fwds[0], overwrite=True)
@@ -209,29 +214,16 @@ for vtx in ctx_verts:
 # out, est_fwd, var_expl, resid = subspace_pursuit_level(mix_fwd, inst, cov,
 #                                                        3, .5, lambda2)
 
-plt.ion()
-plt.figure()
-plt.plot(out.data.T)
-plt.figure()
-plt.plot(e_signals.T)
+# plt.ion()
+# plt.figure()
+# plt.plot(out.data.T)
+# plt.figure()
+# plt.plot(e_signals.T)
 
-# mixed norm
-# loose, depth = 0, None
-# inverse_operator = make_inverse_operator(evo.info, fwd, cov,
-#                                          depth=depth, fixed=True,
-#                                          use_cps=True)
-# stc_mne = apply_inverse(evo, inverse_operator, lambda2=1.,
-#                          method='MNE')
 
-# mxne_out = mixed_norm(evo, fwd, cov, weights=stc_dspm,
-#                       alpha=50, return_as_dipoles=True)
-# mxne_stc = make_stc_from_dipoles(mxne_out, fwd["src"])
-# mxne_brain = mxne_stc.plot(subjects_dir=subjects_dir)
-# mxne_brain.add_foci(vtx, coords_as_verts=True)
-# #
-# # gamma map
-# gamma_out = gamma_map(evo, fwd, cov, 0.05, xyz_same_gamma=True,
-#                       return_as_dipoles=True)
-# gamma_stc = make_stc_from_dipoles(gamma_out, fwd["src"])
-# gamma_brain = gamma_stc.plot(subjects_dir=subjects_dir)
-# gamma_brain.add_foci(vtx, coords_as_verts=True)
+
+ss_brain = stc_mxtf.plot(subjects_dir=subjects_dir)
+for vtx in ctx_verts:
+    ss_brain.add_foci(vtx, coords_as_verts=True, color="red", alpha=0.3)
+for vtx in top_verts:
+    ss_brain.add_foci(vtx, coords_as_verts=True, color="blue", alpha=0.3)
