@@ -23,6 +23,9 @@ def phase_align(peaks, phase, win_ind):
     return np.array(new_peaks)
 
 
+frontal_chans = ["F3", "F1", "Fz", "F2", "F4", "FC3", "FC1", "FC2", "FC4"]
+parietal_chans = ["PO7", "PO3", "POz", "PO4", "PO8", "P5", "P1", "P2", "P6"]
+
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
@@ -46,7 +49,13 @@ for subj in subjs:
             raw.set_eeg_reference(projection=True) # average reference
             raw.filter(l_freq=4, h_freq=7, picks=raw.ch_names) # theta band
             # create frontal/parietal summary channels
-            epo = mne.make_fixed_length_epochs(raw, 10)
+            front_data = raw.get_data(picks=frontal_chans).mean(axis=0, keepdims=True)
+            parietal_data = raw.get_data(picks=parietal_chans).mean(axis=0, keepdims=True)
+            data = np.vstack([front_data, parietal_data])
+            info = mne.create_info(["front", "parietal"],
+                                   raw.info["sfreq"], ch_types="eeg")
+            new_raw = mne.io.RawArray(data, info)
+            epo = mne.make_fixed_length_epochs(new_raw, 10)
             # calculate TFRs to see when theta power is strongest
             # we choose complex output so we can calculate both power and
             # instantaneous phase
@@ -64,20 +73,35 @@ for subj in subjs:
             phase = phase.reshape(phase.shape[0] * phase.shape[1], phase.shape[2])
             phase = np.transpose(phase, [1, 0])
 
+            # phase synchronisation between frontal and parietal
+            fp_sync = 1 - np.sin(np.abs(phase[0,] - phase[1,])/2)[None,]
+            info = mne.create_info(["F_Power", "P_Power",
+                                    "F_Phase", "P_Phase", "FP_Sync"],
+                                    raw.info["sfreq"])
+            pp_raw = mne.io.RawArray(np.concatenate([power, phase, fp_sync], axis=0),
+                                     info)
+            new_raw.crop(tmin=0, tmax=pp_raw.times[-1])
+            # new_raw now contains phase, power and synchronisation next
+            # to the original eeg data
+            new_raw.add_channels([pp_raw], force_update_info=True)
 
             # identify and annotate peaks in power
-            prominence = 1.5
+            pow_dat = new_raw.get_data(["F_Power", "P_Power"])
+            prominence = 3
             win_ind = raw.time_as_index(.25)[0]
-            peaks = find_peaks(power.mean(axis=0), prominence=prominence)[0]
-            peaks = phase_align(peaks, phase[0,], win_ind)
+            f_peaks = find_peaks(pow_dat[0,], prominence=prominence)[0]
+            f_peaks = phase_align(f_peaks, phase[0,], win_ind)
+            p_peaks = find_peaks(pow_dat[1,], prominence=prominence)[0]
+            p_peaks = phase_align(p_peaks, phase[1,], win_ind)
 
-            for p in peaks:
-                raw.annotations.append(raw.times[p], 0, "peak")
-
+            for f in f_peaks:
+                new_raw.annotations.append(new_raw.times[f], 0, "F_peak")
+            for p in p_peaks:
+                new_raw.annotations.append(new_raw.times[p], 0, "P_peak")
 
             # finally epoch all theta events
-            events = mne.events_from_annotations(raw)
+            events = mne.events_from_annotations(new_raw)
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
                              event_repeated="merge")
-            epo.save(join(sess_dir, f"{subj}_{sess}_{pp}-epo.fif"),
+            epo.save(join(sess_dir, f"MT-YG-{subj}_{sess}_{pp}-epo.fif"),
                      overwrite=True)

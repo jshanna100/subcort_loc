@@ -1,5 +1,6 @@
 from os import listdir
 from os.path import join
+import re
 
 """
 Fix the brainsight files so they can be more easily read by MNE-Python
@@ -10,11 +11,16 @@ root_dir = "/home/jev/"
 data_dir = join(root_dir, "hdd/memtacs/pilot/01_BrainSight")
 filenames = listdir(data_dir)
 
+excludes = []
+
 for filename in filenames:
-    if filename[-4:] != ".txt":
+    match = re.match("MT-YG-(\d{3})_Session(\d)_bs.txt", filename)
+    if not match:
         continue
-    filename = filename[:-4]
-    with open(join(data_dir, f"{filename}.txt"), "rt") as f:
+    (subj, sess) = match.groups()
+    if subj in excludes:
+        continue
+    with open(join(data_dir, filename), "rt") as f:
         lines = f.readlines()
 
     starts = {}
@@ -36,5 +42,5 @@ for filename in filenames:
         lines[v] = lines[v][2:] # Get rid of "# " at beginning
 
     for k, v in line_inds.items():
-        with open(join(data_dir, f"{filename}_{k}.txt"), "wt") as f:
+        with open(join(data_dir, f"MT-YG-{subj}_Session{sess}_bs_{k}.txt"), "wt") as f:
             f.writelines(lines[v[0]:v[1]])

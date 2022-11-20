@@ -1,51 +1,61 @@
 import mne
 from os.path import join
-from mne._freesurfer import read_freesurfer_lut
+from os import listdir
+import numpy as np
 
 '''
-Build source spaces and forward models
-(not actually needed when using subspace pursuit)
+Build source spaces and bems
 '''
 
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
+data_list = listdir(data_dir)
 
-lut, lut_cols = read_freesurfer_lut()
+subjs = [x for x in np.arange(120,150)]
 
-subjs = ["120"]
-sessions = ["2"]
-preposts = ["pre", "post"]
-
-subjects_dir = root_dir + "/freesurfer/subjects"
+n_jobs = 16
+subjects_dir = root_dir + "hdd/freesurfer/subjects"
 spacing = "ico5"
 sc_base = ["Caudate", "Putamen", "Hippocampus", "Amygdala"]
 sc_names = [f"Left-{x}" for x in sc_base] +  [f"Right-{x}" for x in sc_base]
 
-for subj in subjs:
-    subj_str = f"MT-YG-{subj}"
-    subj_dir = join(data_dir, subj_str)
-    # cortex
-    bem_model = mne.make_bem_model(subj_str, subjects_dir=subjects_dir, ico=4)
-    bem = mne.make_bem_solution(bem_model)
+excludes = [135]
 
-    src = mne.setup_source_space(subj_str, subjects_dir=subjects_dir,
-                                 n_jobs=16, spacing=spacing)
-    # sub cortical
-    vol_src = mne.setup_volume_source_space(subj_str, bem=bem,
-                                            volume_label=sc_names,
-                                            subjects_dir=subjects_dir)
-    mix_src = src + vol_src
-    mix_src.save(join(subj_dir, f"MT-YG-{subj}-src.fif"), overwrite=True)
-    for sess in sessions:
-        sess_dir = join(subj_dir, f"Session{sess}", "EEG")
-        trans = join(sess_dir, f"MT-YG-{subj}_Session{sess}-trans.fif")
-        raw = mne.io.Raw(join(sess_dir, f"MT-YG-{subj}_pre{sess}-raw.fif"))
-        mix_fwd = mne.make_forward_solution(raw.info, trans, mix_src, bem, n_jobs=16)
-        mne.write_forward_solution(join(sess_dir,
-                                        f"MT-YG-{subj}_Session{sess}-mix-fwd.fif"),
-                                   mix_fwd, overwrite=True)
-        ctx_fwd = mne.make_forward_solution(raw.info, trans, src, bem, n_jobs=16)
-        mne.write_forward_solution(join(sess_dir,
-                                        f"MT-YG-{subj}_Session{sess}-ctx-fwd.fif"),
-                                   ctx_fwd, overwrite=True)
+for subj in subjs:
+    if subj in excludes:
+        continue
+    subj_str = f"MT-YG-{subj}"
+    if subj_str not in data_list:
+        print(f"{subj_str} not found. Skipping.")
+        continue
+    subj_dir = join(data_dir, subj_str)
+
+    try:
+        mne.bem.make_watershed_bem(subj_str, subjects_dir=subjects_dir)
+    except:
+        print("BEM already exists.")
+    try:
+        mne.bem.make_scalp_surfaces(subj_str, subjects_dir=subjects_dir)
+    except:
+        print("Scalp surfaces already exist.")
+
+    bem_filename = f"MT-YG-{subj}-bem.fif"
+    if bem_filename not in listdir(subj_dir):
+        bem_model = mne.make_bem_model(subj_str, subjects_dir=subjects_dir,
+                                       ico=4)
+        bem = mne.make_bem_solution(bem_model)
+        mne.write_bem_solution(join(subj_dir, f"MT-YG-{subj}-bem.fif"), bem)
+    else:
+        bem = mne.read_bem_solution(join(subj_dir, f"MT-YG-{subj}-bem.fif"))
+    src_filename = f"MT-YG-{subj}-src.fif"
+    if src_filename not in listdir(subj_dir):
+        src = mne.setup_source_space(subj_str, subjects_dir=subjects_dir,
+                                     n_jobs=n_jobs, spacing=spacing)
+        src.save(join(subj_dir, src_filename), overwrite=True)
+        # sub cortical
+        vol_src = mne.setup_volume_source_space(subj_str, bem=bem,
+                                                volume_label=sc_names,
+                                                subjects_dir=subjects_dir)
+
+        vol_src.save(join(subj_dir, f"MT-YG-{subj}_vol-src.fif"), overwrite=True)
