@@ -43,7 +43,6 @@ for subj in subjs:
             raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_{pp}_ica-raw.fif"),
                              preload=True)
             all_chans = raw.ch_names
-            raw.set_eeg_reference(projection=True) # average reference
             raw.filter(l_freq=4, h_freq=7, picks=raw.ch_names) # theta band
             # create frontal/parietal summary channels
             epo = mne.make_fixed_length_epochs(raw, 10)
@@ -76,7 +75,7 @@ for subj in subjs:
 
 
             # finally epoch all theta events
-            events = mne.events_from_annotations(raw)
+            events = mne.events_from_annotations(raw, event_id={"peak":10})
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
                              event_repeated="merge")
             epo.save(join(sess_dir, f"{subj}_{sess}_{pp}-epo.fif"),

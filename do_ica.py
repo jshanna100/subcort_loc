@@ -14,9 +14,13 @@ data_dir = join(root_dir, mem_dir, "02_MemTask")
 subjs = listdir(data_dir)
 preposts = ["pre", "post"]
 
+incl = ["120", "125", "132", "142"]
+
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
+        continue
+    if match.groups()[0] not in incl:
         continue
     subj_dir = join(data_dir, subj)
     for sess in listdir(subj_dir):
@@ -30,4 +34,5 @@ for subj in subjs:
             ica.fit(raw)
             eog_bads, _ = ica.find_bads_eog(raw)
             new_raw = ica.apply(raw, exclude=eog_bads)
-            new_raw.save(join(sess_dir, f"{subj}_{sess}_{pp}_ica-raw.fif"))
+            new_raw.save(join(sess_dir, f"{subj}_{sess}_{pp}_ica-raw.fif"),
+            overwrite=True)
