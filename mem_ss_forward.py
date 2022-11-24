@@ -23,6 +23,7 @@ sc_names = [f"Left-{x}" for x in sc_base] +  [f"Right-{x}" for x in sc_base]
 n_jobs = 16
 subjects_dir = root_dir + "hdd/freesurfer/subjects"
 spacing = "ico5"
+overwrite = False
 
 subjs = listdir(data_dir)
 
@@ -33,6 +34,9 @@ for subj in subjs:
             continue
         sess_dir = join(subj_dir, sess, "EEG")
         trans = join(sess_dir, f"{subj}_{sess}_auto-trans.fif")
+        if f"{subj}_{sess}_ctx-fwd.fif" in listdir(sess_dir) and not overwrite:
+            print("Forward model already exists. Skipping...")
+            continue
         if f"{subj}_{sess}_auto-trans.fif" not in listdir(sess_dir):
             continue
         ctx_src = mne.read_source_spaces(join(subj_dir,

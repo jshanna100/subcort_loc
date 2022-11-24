@@ -36,7 +36,7 @@ def file_to_montage(pos_dir, subj, sess):
                                            ch_pos=elec_dict, hsp=hsp)
     return digmon
 
-overwrite = True
+overwrite = False
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")

@@ -6,7 +6,10 @@ mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
 
 recs = [[120, 1, "post", ["FT9"]], [125, 1, "post", ["PO4"]],
-        [132, 1, "pre", ["FCz", "FT7"]], [142, 1, "post", ["FC1"]]]
+        [132, 2, "pre", ["AF7"]], [133, 2, "pre", ["FT7", "FCz"]],
+        [121, 2, "pre", ["AF3", "TP9"]],
+        [121, 2, "post", ["AF3", "TP10", "TP9"]],
+        [144, 1, "post", ["C1", "TP10"]], [142, 1, "post", ["FC1"]]]
 
 for rec in recs:
     (subj, sess, pp, bad_chans) = rec

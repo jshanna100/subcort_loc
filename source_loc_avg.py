@@ -39,7 +39,7 @@ cwt_n_cycles = np.array([2, 3, 5, 5])
 mt_bandwidth = 3.5
 s = 4
 sub_s = 6
-do_cnx = False
+do_cnx = True
 if do_cnx:
     s = int(s/2)
     sub_s = int(sub_s/2)
@@ -55,6 +55,9 @@ mos_str = """
 
 snr = 1.
 lambda2 = 1. / snr ** 2
+
+hit_df_dict = {"subj":[], "session":[], "reg":[]}
+
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
@@ -198,9 +201,44 @@ for subj in subjs:
                                  labels=pp_reg_names[pp_idx], rotation=0, weight="bold")
             axes[pp_axes[pp][3]].set_title("wPLI")
 
+        # build up a list of areas identified
+        for rn in reg_names:
+            hit_df_dict["subj"].append(subj)
+            hit_df_dict["session"].append(sess)
+            hit_df_dict["reg"].append(rn.replace("*", ""))
+
         plt.suptitle(f"{subj} {sess}", fontsize=40)
         plt.annotate("Post", (0.19, 0.43), xycoords="figure fraction", fontsize=70)
         plt.annotate("Pre", (0.2, 0.91), xycoords="figure fraction", fontsize=70)
         plt.tight_layout()
         plt.savefig(join(fig_dir, f"{subj}_{sess}_src-cnx.png"))
         plt.close("all")
+
+
+hit_df = pd.DataFrame.from_dict(hit_df_dict)
+hit_df.to_pickle(join(fig_dir, "hits.pickle"))
+
+# plot cortical hits
+regs = hit_df["reg"]
+labels = mne.read_labels_from_annot("fsaverage", "aparc",
+                                    subjects_dir=subjects_dir)
+regs, counts = np.unique(regs, return_counts=True)
+alphas = (counts - counts.min()) / (counts.max() - counts.min())  * 0.8 + 0.2
+brain = mne.viz.Brain("fsaverage", hemi="both", surf="inflated")
+for reg, alpha in zip(regs, alphas):
+    if "-lh" not in reg and "-rh" not in reg:
+        continue
+    label = [lab for lab in labels if lab.name == reg][0]
+    brain.add_label(label, color="red", alpha=alpha, hemi=label.name[-2:])
+img = make_brain_image(views, brain, orient="square")
+
+fig, axes = plt.subplots(1, 2, figsize=(38.4, 21.6))
+axes[0].imshow(img)
+axes[0].axis("off")
+axes[0].set_title("Cortical hits")
+reg_order = [regs[idx] for idx in np.argsort(counts)]
+sns.countplot(data=hit_df, x="reg", order=reg_order, ax=axes[1])
+plt.xticks(rotation=90, weight="bold")
+axes[1].set_title("All hits")
+plt.tight_layout()
+plt.savefig(join(fig_dir, "hist_distro.png"))

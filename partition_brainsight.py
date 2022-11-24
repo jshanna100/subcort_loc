@@ -14,7 +14,7 @@ filenames = listdir(data_dir)
 excludes = []
 
 for filename in filenames:
-    match = re.match("MT-YG-(\d{3})_Session(\d)_bs.txt", filename)
+    match = re.match("MT-YG-(\d{3})_Session(\d).txt", filename)
     if not match:
         continue
     (subj, sess) = match.groups()
@@ -42,5 +42,5 @@ for filename in filenames:
         lines[v] = lines[v][2:] # Get rid of "# " at beginning
 
     for k, v in line_inds.items():
-        with open(join(data_dir, f"MT-YG-{subj}_Session{sess}_bs_{k}.txt"), "wt") as f:
+        with open(join(data_dir, f"MT-YG-{subj}_Session{sess}_{k}.txt"), "wt") as f:
             f.writelines(lines[v[0]:v[1]])

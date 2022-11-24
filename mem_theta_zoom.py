@@ -29,6 +29,7 @@ data_dir = join(root_dir, mem_dir, "02_MemTask")
 
 subjs = listdir(data_dir)
 preposts = ["pre", "post"]
+overwrite = True
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -40,6 +41,10 @@ for subj in subjs:
             continue
         sess_dir = join(subj_dir, sess, "EEG")
         for pp in preposts:
+            outfile = f"{subj}_{sess}_{pp}-epo.fif"
+            if outfile in listdir(sess_dir) and not overwrite:
+                print("Already exists. Skipping...")
+                continue
             raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_{pp}_ica-raw.fif"),
                              preload=True)
             all_chans = raw.ch_names
@@ -78,5 +83,5 @@ for subj in subjs:
             events = mne.events_from_annotations(raw, event_id={"peak":10})
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
                              event_repeated="merge")
-            epo.save(join(sess_dir, f"{subj}_{sess}_{pp}-epo.fif"),
+            epo.save(join(sess_dir, outfile),
                      overwrite=True)

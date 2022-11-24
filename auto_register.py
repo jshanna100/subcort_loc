@@ -14,6 +14,7 @@ subjects_dir = join(root_dir, "hdd/freesurfer/subjects")
 
 subjs = listdir(data_dir)
 preposts = ["pre", "post"]
+overwrite = False
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -24,6 +25,10 @@ for subj in subjs:
         if not re.match("Session\d", sess):
             continue
         sess_dir = join(subj_dir, sess, "EEG")
+        outfile = f'{subj}_{sess}_auto-trans.fif'
+        if outfile in listdir(sess_dir) and not overwrite:
+            print("Already exists. Skipping...")
+            continue
         raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre-raw.fif"),
                          preload=True)
         # get planned fiducials
@@ -52,6 +57,6 @@ for subj in subjs:
         fig = mne.viz.plot_alignment(raw.info, trans=coreg.trans, **plot_kwargs)
         print(f"\n{subj} {sess}\n")
         breakpoint()
-        mne.write_trans(join(sess_dir, f'{subj}_{sess}_auto-trans.fif'),
+        mne.write_trans(join(sess_dir, outfile),
                         coreg.trans)
         fig.plotter.close()

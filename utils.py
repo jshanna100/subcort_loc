@@ -19,7 +19,7 @@ def make_brain_image(views, brain, orient="horizontal", text="",
         img_list.append(scr)
     if text != "":
         img_txt_list = []
-        brain.add_text(0, 0.8, text, text_loc, font_size=fontsize, color=(0,0,0))
+        brain.add_text(0, 0.8, text, text_loc, font_size=fontsize, color=(1,1,1))
         for k,v in views.items():
             brain.show_view(**v)
             scr = brain.screenshot()
