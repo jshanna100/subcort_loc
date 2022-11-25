@@ -4,7 +4,8 @@ import numpy as np
 import mne
 import re
 from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
-                                                 subspace_pursuit_level)
+                                                 subspace_pursuit_level,
+                                                 mix_patch_forwards)
 import matplotlib.pyplot as plt
 import pickle
 from utils import make_brain_image, locate_vertex
@@ -124,11 +125,7 @@ for subj in subjs:
                                                patch_comp_n=2)
 
         # subcortical
-        mix_src = fwds[-1]["src"] + sub_fwd["src"]
-        mix_fwd = mne.make_forward_solution(epo.info, trans, mix_src, bem)
-        mix_fwd = mne.convert_forward_solution(mix_fwd, force_fixed=True)
-        mix_gain = np.hstack((fwds[-1]["sol"]["data"], sub_fwd["sol"]["data"]))
-        mix_fwd["sol"]["data"] = mix_gain
+        mix_fwd = mix_patch_forwards(fwds[-1], sub_fwd, epo.info, trans, bem)
         amp_mix, est_fwd, var_expl, resid = subspace_pursuit_level(mix_fwd, epo, cov,
                                                                    sub_s, .5, lambda2,
                                                                    cnx=cnx)
