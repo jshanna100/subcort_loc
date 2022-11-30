@@ -10,10 +10,11 @@ from mne.inverse_sparse.subspace_pursuit import (subspace_pursuit,
                                                  mix_patch_forwards)
 import matplotlib.pyplot as plt
 import pickle
-from utils import make_brain_image, locate_vertex
+from utils import make_brain_image, locate_vertex, fill_dpte_mat
 import pandas as pd
 import seaborn as sns
 from mne_connectivity import spectral_connectivity_epochs as sce
+from dPTE import epo_dPTE
 from itertools import product
 plt.ion()
 
@@ -68,8 +69,9 @@ snr = 1.
 lambda2 = 1. / snr ** 2
 
 signal_dict = {"subj":[], "stim":[], "pp":[], "reg":[], "time":[], "amp":[]}
+amp_dict = {"subj":[], "stim":[], "pp":[], "reg":[], "amp":[]}
 cnx_dict = {"subj":[], "stim":[], "pp":[], "from_reg":[], "to_reg":[],
-            "wpli":[], "dpli":[]}
+            "wpli":[], "dpli":[], "dpte":[]}
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -81,7 +83,6 @@ for subj in subjs:
     except:
         print("BEM not found. Skipping...")
         continue
-    src = mne.read_source_spaces(join(subj_dir, f"{subj}-src.fif"))
     labels = mne.read_labels_from_annot(subj, "aparc",
                                         subjects_dir=subjects_dir)
     lh_labels = [lab for lab in labels if "lh" in lab.name]
@@ -104,8 +105,8 @@ for subj in subjs:
         for pp_idx, pp in enumerate(preposts):
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
-                                  preload=True)["peak"]
-            epo.crop(tmin=-.3, tmax=.3)
+                                  preload=True)
+            #epo.crop(tmin=-.15, tmax=.15)
             pp_epos[pp] = epo
             pp_inds[pp] = [pp_epo_idx, pp_epo_idx + len(epo)]
             pp_epo_idx = len(epo)
@@ -117,7 +118,8 @@ for subj in subjs:
             pp_epos[pp].set_eeg_reference(projection=True)
         epo = mne.concatenate_epochs(list(pp_epos.values()))
 
-        cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        #cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        cov = mne.make_ad_hoc_cov(epo.info)
         inst = epo
 
         mix_fwd = mix_patch_forwards(ctx_fwd, sub_fwd, inst.info, trans, bem)
@@ -129,8 +131,8 @@ for subj in subjs:
         # assigns stc indices to regions
         verts = stc[0].vertices
         idx = 0
-        reg_inds = {"frontal-lh":[], "temporal-lh":[],
-                    "frontal-rh":[], "temporal-rh":[],
+        reg_inds = {"frontal-lh":[], "posterior-lh":[],
+                    "frontal-rh":[], "posterior-rh":[],
                     "hippocampus-lh":[], "hippocampus-rh":[]}
         for vert_idx, vert in enumerate(verts):
             for vtx in vert:
@@ -140,14 +142,14 @@ for subj in subjs:
                     reg_name = locate_vertex(vtx, rh_labels).name
                 else:
                     reg_name = ""
-                if "front" in reg_name and vert_idx == 0:
+                if "pars" in reg_name and vert_idx == 0:
                     reg_inds["frontal-lh"].append(idx)
-                elif "front" in reg_name and vert_idx == 1:
+                elif "pars" in reg_name and vert_idx == 1:
                     reg_inds["frontal-rh"].append(idx)
-                elif "temporal" in reg_name and vert_idx == 0:
-                    reg_inds["temporal-lh"].append(idx)
-                elif "temporal" in reg_name and vert_idx == 1:
-                    reg_inds["temporal-rh"].append(idx)
+                elif "supra" in reg_name and vert_idx == 0:
+                    reg_inds["posterior-lh"].append(idx)
+                elif "supra" in reg_name and vert_idx == 1:
+                    reg_inds["posterior-rh"].append(idx)
                 elif vert_idx == 2:
                     reg_inds["hippocampus-lh"].append(idx)
                 elif vert_idx == 3:
@@ -171,6 +173,7 @@ for subj in subjs:
         # signals
         times = stc[0].times
         data_n = len(times)
+        epo_n = len(these_data)
         for pp in preposts:
             these_data = picked_data[pp_inds[pp][0]:pp_inds[pp][1]]
             for k_idx, k in enumerate(reg_inds.keys()):
@@ -181,17 +184,31 @@ for subj in subjs:
                     signal_dict["reg"].extend([k] * data_n)
                     signal_dict["time"].extend(times)
                     signal_dict["amp"].extend(these_data[epo_idx, k_idx])
+                amp_dict["subj"].append(subj)
+                amp_dict["stim"].append(stim_key[subj][sess])
+                amp_dict["pp"].append(pp)
+                amp_dict["reg"].append(k)
+                norm = np.linalg.norm(np.linalg.norm(these_data[:, k_idx],
+                                      axis=-1), axis=0) / (epo_n + data_n)
+                amp_dict["amp"].append(norm)
+
 
             # connectivity
             reg_names = list(reg_inds.keys())
-            con = sce(these_data, method="wpli", fmin=4, fmax=7, faverage=True,
+            con = sce(these_data, method="wpli", fmin=4, fmax=8, faverage=True,
                       sfreq=epo.info["sfreq"], mt_bandwidth=3.5,
-                      tmin=0.15, tmax=0.45, indices=cnx_combos)
+                      indices=cnx_combos)
             wpli_data = np.squeeze(con.get_data())
-            con = sce(these_data, method="dpli", fmin=4, fmax=7, faverage=True,
+            con = sce(these_data, method="dpli", fmin=4, fmax=8, faverage=True,
                       sfreq=epo.info["sfreq"], mt_bandwidth=3.5,
-                      tmin=0.15, tmax=0.45, indices=cnx_combos)
+                      indices=cnx_combos)
             dpli_data = np.squeeze(con.get_data())
+
+            # dPTE
+            dpte = epo_dPTE(these_data, [4, 5, 6, 7, 8], epo.info["sfreq"],
+                            n_cycles=[3, 5, 7, 7, 7])
+            dpte = fill_dpte_mat(dpte.mean(axis=0))
+
             for cnx_idx, (w_cnx, d_cnx) in enumerate(zip(wpli_data, dpli_data)):
                 cnx_dict["subj"].append(subj)
                 cnx_dict["stim"].append(stim_key[subj][sess])
@@ -200,8 +217,15 @@ for subj in subjs:
                 cnx_dict["to_reg"].append(reg_names[cnx_combos[1][cnx_idx]])
                 cnx_dict["wpli"].append(w_cnx)
                 cnx_dict["dpli"].append(d_cnx)
+                cnx_dict["dpte"].append(dpte[cnx_combos[0][cnx_idx],
+                                             cnx_combos[1][cnx_idx]])
 
 cnx_df = pd.DataFrame.from_dict(cnx_dict)
-cnx_df.to_pickle(join(data_dir, "cnx.pickle"))
+cnx_df.to_pickle(join(fig_dir, "cnx.pickle"))
 signal_df = pd.DataFrame.from_dict(signal_dict)
-signal_df.to_pickle(join(data_dir, "signal.pickle"))
+signal_df.to_pickle(join(fig_dir, "signal.pickle"))
+amp_df = pd.DataFrame.from_dict(amp_dict)
+amp_df.to_pickle(join(fig_dir, "amp.pickle"))
+
+cnx_df.to_csv(join(fig_dir, "cnx.csv"))
+amp_df.to_csv(join(fig_dir, "amp.csv"))

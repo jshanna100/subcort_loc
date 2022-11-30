@@ -17,21 +17,23 @@ proc_dir = join(root_dir, "hdd", "memtacs", "proc")
 data_list = listdir(data_dir)
 proc_list = listdir(proc_dir)
 
-label_groups = [["rostralmiddlefrontal-lh", "superiorfrontal-lh"],
-                ["middletemporal-lh", "superiortemporal-lh", "inferiortemporal-lh"],
-                ["rostralmiddlefrontal-rh", "superiorfrontal-rh"],
-                ["middletemporal-rh", "superiortemporal-rh", "inferiortemporal-rh"]]
+label_groups = [["parstriangularis-lh", "parsorbitalis-lh", "parsopercularis-lh"],
+                ["supramarginal-lh"],
+                ["parstriangularis-rh", "parsorbitalis-rh", "parsopercularis-rh"],
+                ["supramarginal-rh"]]
 
 sc_base = ["Hippocampus"]
 sc_names = [f"Left-{x}" for x in sc_base] +  [f"Right-{x}" for x in sc_base]
 
 n_jobs = 16
 subjects_dir = root_dir + "hdd/freesurfer/subjects"
-overwrite = False
+overwrite = True
 
 subjs = listdir(data_dir)
 
 for subj in subjs:
+    if "MT-YG" not in subj:
+        continue
     subj_dir = join(data_dir, subj)
     for sess in listdir(subj_dir):
         if not re.match("Session\d", sess):
@@ -62,8 +64,8 @@ for subj in subjs:
         raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre-raw.fif"))
 
         ctx_fwd = make_restricted_forward(subj, comb_labels, bem, raw.info,
-                                         trans, subjects_dir=subjects_dir,
-                                         n_jobs=16)
+                                          trans, subjects_dir=subjects_dir,
+                                          n_jobs=16)
         mne.write_forward_solution(join(sess_dir,
                                         f"{subj}_{sess}_restr-fwd.fif"),
                                    ctx_fwd, overwrite=True)

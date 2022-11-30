@@ -35,12 +35,12 @@ subjects_dir = root_dir + "hdd/freesurfer/subjects"
 
 mode = "cwt_morlet"
 mode= "multitaper"
-cwt_freqs = np.array([4, 5, 6, 7])
-cwt_n_cycles = np.array([2, 3, 5, 5])
+cwt_freqs = np.array([4, 5, 6, 7, 8])
+cwt_n_cycles = np.array([3, 5, 5, 5, 7])
 mt_bandwidth = 3.5
 s = 4
 sub_s = 6
-do_cnx = True
+do_cnx = False
 if do_cnx:
     s = int(s/2)
     sub_s = int(sub_s/2)
@@ -58,6 +58,7 @@ snr = 1.
 lambda2 = 1. / snr ** 2
 
 hit_df_dict = {"subj":[], "session":[], "reg":[]}
+drop_df_dict = {"subj":[], "session":[], "reg":[]}
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -96,8 +97,8 @@ for subj in subjs:
         for pp_idx, pp in enumerate(preposts):
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
-                                  preload=True)["peak"]
-            epo.crop(tmin=-.3, tmax=.3)
+                                  preload=True)
+            #epo.crop(tmin=-.3, tmax=.3)
             pp_epos[pp] = epo
             pp_inds[pp] = [pp_epo_idx, pp_epo_idx + len(epo)]
             pp_epo_idx = len(epo)
@@ -110,11 +111,12 @@ for subj in subjs:
             pp_epos[pp].average().apply_proj().plot(axes=axes[pp_axes[pp][0]])
         epo = mne.concatenate_epochs(list(pp_epos.values()))
         if do_cnx:
-            cnx = {"method":"wpli", "fmin":4, "fmax":7,
+            cnx = {"method":"wpli", "fmin":4, "fmax":8,
                    "sfreq":epo.info["sfreq"]}
         else:
             cnx = None
-        cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        #cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        cov = mne.make_ad_hoc_cov(epo.info)
 
         # subspace pursuit - amplitude
         amp_ctx, fwds, resid = subspace_pursuit(subj, ["ico1", "ico2"], bem,
@@ -161,6 +163,21 @@ for subj in subjs:
                     data_idx += 1
             pp_reg_names.append(reg_names)
 
+            # while we're here, note which ctx vertices dropped
+            drop_names = []
+            lh_drop = np.setdiff1d(amp_ctx[0].vertices[0],
+                                   amp_mix[0].vertices[0])
+            rh_drop = np.setdiff1d(amp_ctx[0].vertices[1],
+                                   amp_mix[0].vertices[1])
+            for src_idx, vert in enumerate([lh_drop, rh_drop]):
+                lab = locate_vertex(vtx, hemi_labels[src_idx])
+                if lab is None:
+                    hemi_str = "lh" if src_idx == 0 else "rh"
+                    reg_name = f"unknown-{hemi_str}"
+                else:
+                    reg_name = lab.name
+                drop_names.append(reg_name)
+
             df = pd.DataFrame.from_dict(df_dict)
             sns.lineplot(data=df, x="Time", y="Amp", hue="Reg",
                          ax=axes[pp_axes[pp][2]])
@@ -180,10 +197,9 @@ for subj in subjs:
             axes[pp_axes[pp][1]].axis("off")
             axes[pp_axes[pp][1]].set_title("Cortical sources")
 
-            con = sce(data, method="wpli", fmin=4, fmax=7, faverage=True,
+            con = sce(data, method="wpli", fmin=4, fmax=8, faverage=True,
                       sfreq=epo.info["sfreq"], mode=mode, cwt_freqs=cwt_freqs,
-                      cwt_n_cycles=cwt_n_cycles, mt_bandwidth=mt_bandwidth,
-                      tmin=0.15, tmax=0.45)
+                      cwt_n_cycles=cwt_n_cycles, mt_bandwidth=mt_bandwidth)
             con_mat = np.squeeze(con.get_data(output="dense"))
             con_mats.append(con_mat)
 
@@ -203,6 +219,10 @@ for subj in subjs:
             hit_df_dict["subj"].append(subj)
             hit_df_dict["session"].append(sess)
             hit_df_dict["reg"].append(rn.replace("*", ""))
+        for rn in drop_names:
+            drop_df_dict["subj"].append(subj)
+            drop_df_dict["session"].append(sess)
+            drop_df_dict["reg"].append(rn)
 
         plt.suptitle(f"{subj} {sess}", fontsize=40)
         plt.annotate("Post", (0.19, 0.43), xycoords="figure fraction", fontsize=70)
@@ -214,6 +234,8 @@ for subj in subjs:
 
 hit_df = pd.DataFrame.from_dict(hit_df_dict)
 hit_df.to_pickle(join(fig_dir, "hits.pickle"))
+drop_df = pd.DataFrame.from_dict(drop_df_dict)
+drop_df.to_pickle(join(fig_dir, "drops.pickle"))
 
 # plot cortical hits
 regs = hit_df["reg"]
@@ -225,7 +247,11 @@ brain = mne.viz.Brain("fsaverage", hemi="both", surf="inflated")
 for reg, alpha in zip(regs, alphas):
     if "-lh" not in reg and "-rh" not in reg:
         continue
-    label = [lab for lab in labels if lab.name == reg][0]
+    label = [lab for lab in labels if lab.name == reg]
+    if len(label):
+        label = label[0]
+    else:
+        continue
     brain.add_label(label, color="red", alpha=alpha, hemi=label.name[-2:])
 img = make_brain_image(views, brain, orient="square")
 
@@ -238,4 +264,33 @@ sns.countplot(data=hit_df, x="reg", order=reg_order, ax=axes[1])
 plt.xticks(rotation=90, weight="bold")
 axes[1].set_title("All hits")
 plt.tight_layout()
-plt.savefig(join(fig_dir, "hist_distro.png"))
+plt.savefig(join(fig_dir, "hits_distro.png"))
+
+# plot cortical drops
+regs = drop_df["reg"]
+labels = mne.read_labels_from_annot("fsaverage", "aparc",
+                                    subjects_dir=subjects_dir)
+regs, counts = np.unique(regs, return_counts=True)
+alphas = (counts - counts.min()) / (counts.max() - counts.min())  * 0.8 + 0.2
+brain = mne.viz.Brain("fsaverage", hemi="both", surf="inflated")
+for reg, alpha in zip(regs, alphas):
+    if "-lh" not in reg and "-rh" not in reg:
+        continue
+    label = [lab for lab in labels if lab.name == reg]
+    if len(label):
+        label = label[0]
+    else:
+        continue
+    brain.add_label(label, color="blue", alpha=alpha, hemi=label.name[-2:])
+img = make_brain_image(views, brain, orient="square")
+
+fig, axes = plt.subplots(1, 2, figsize=(38.4, 21.6))
+axes[0].imshow(img)
+axes[0].axis("off")
+axes[0].set_title("Cortical drops")
+reg_order = [regs[idx] for idx in np.argsort(counts)]
+sns.countplot(data=drop_df, x="reg", order=reg_order, ax=axes[1])
+plt.xticks(rotation=90, weight="bold")
+axes[1].set_title("All drops")
+plt.tight_layout()
+plt.savefig(join(fig_dir, "drop_distro.png"))

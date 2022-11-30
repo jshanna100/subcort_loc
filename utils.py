@@ -6,6 +6,7 @@ from mne import make_forward_solution, convert_forward_solution
 from mne.utils.numerics import _PCA
 from mne.io.pick import pick_types, channel_type, _picks_by_type
 from mne.io.constants import FIFF
+import pickle
 
 def _whiten_gain(gain, info):
     pre_whitener = np.empty([len(gain), 1])
@@ -206,3 +207,10 @@ def make_restricted_forward(subject, labels, bem, info, trans,
     new_fwd = _convert_forward_patch(fwd, new_nns, new_rrs, new_gain, new_verts)
 
     return new_fwd
+
+def fill_dpte_mat(mat):
+    out_mat = mat.copy()
+    triu_inds = np.triu_indices(len(mat), k=1)
+    tril_inds = np.tril_indices(len(mat), k=-1)
+    out_mat[tril_inds] = 0.5 - (mat[triu_inds] - .5)
+    return out_mat

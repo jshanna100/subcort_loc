@@ -48,13 +48,13 @@ for subj in subjs:
             raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_{pp}_ica-raw.fif"),
                              preload=True)
             all_chans = raw.ch_names
-            raw.filter(l_freq=4, h_freq=7, picks=raw.ch_names) # theta band
+            raw.filter(l_freq=4, h_freq=8, picks=raw.ch_names) # theta band
             # create frontal/parietal summary channels
             epo = mne.make_fixed_length_epochs(raw, 10)
             # calculate TFRs to see when theta power is strongest
             # we choose complex output so we can calculate both power and
             # instantaneous phase
-            tfr = mne.time_frequency.tfr_morlet(epo, [4, 4.5, 5, 5.5, 6, 6.5, 7], 3,
+            tfr = mne.time_frequency.tfr_morlet(epo, [4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8], 3,
                                                 output="complex", return_itc=False,
                                                 average=False)
             power = np.abs(tfr).mean(axis=2) * 1e+5
@@ -82,6 +82,6 @@ for subj in subjs:
             # finally epoch all theta events
             events = mne.events_from_annotations(raw, event_id={"peak":10})
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
-                             event_repeated="merge")
+                             event_repeated="merge")["peak"]
             epo.save(join(sess_dir, outfile),
                      overwrite=True)
