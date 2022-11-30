@@ -4,8 +4,7 @@ from dPTE import epo_dPTE
 from os.path import join
 from os import listdir
 import re
-from mne_connectivity import spectral_connectivity_epochs as sce
-from cnx_utils import TriuSparse
+from mne.beamformer import make_dics, apply_dics_epochs
 
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
@@ -33,7 +32,7 @@ for subj in subjs:
         sess_dir = join(subj_dir, sess, "EEG")
         ctxfwd_file = f"{subj}_{sess}_ctx-fwd.fif"
         fwd = mne.read_forward_solution(join(sess_dir, ctxfwd_file))
-
+        filter = make_dics()
         for pp_idx, pp in enumerate(preposts):
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
