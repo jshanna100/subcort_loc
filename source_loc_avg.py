@@ -11,7 +11,8 @@ import pickle
 from utils import make_brain_image, locate_vertex
 import pandas as pd
 import seaborn as sns
-from mne_connectivity import spectral_connectivity_epochs as sce
+from dPTE import epo_dPTE
+import matplotlib.pyplot as plt
 plt.ion()
 
 sc_base = ["Caudate", "Putamen", "Hippocampus", "Amygdala"]
@@ -30,17 +31,18 @@ views = {"left":{"view":"lateral", "distance":625, "hemi":"lh"},
 root_dir = "/home/jev/"
 mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
 fig_dir = join(mem_dir, "figures")
-data_dir = join(root_dir, mem_dir, "02_MemTask")
+data_dir = join(mem_dir, "02_MemTask")
 subjects_dir = root_dir + "hdd/freesurfer/subjects"
 
+n_jobs = 8
 mode = "cwt_morlet"
-mode= "multitaper"
+mode = "multitaper"
 cwt_freqs = np.array([4, 5, 6, 7, 8])
 cwt_n_cycles = np.array([3, 5, 5, 5, 7])
 mt_bandwidth = 3.5
 s = 4
 sub_s = 6
-do_cnx = False
+do_cnx = True
 if do_cnx:
     s = int(s/2)
     sub_s = int(sub_s/2)
@@ -113,6 +115,8 @@ for subj in subjs:
         if do_cnx:
             cnx = {"method":"wpli", "fmin":4, "fmax":8,
                    "sfreq":epo.info["sfreq"]}
+            cnx = {"freqs":[4, 5, 6, 7], "cycles":[3, 5, 7, 7],
+                   "sfreq":epo.info["sfreq"], "n_jobs":n_jobs}
         else:
             cnx = None
         #cov = mne.compute_covariance(epo, keep_sample_mean=False)
@@ -120,11 +124,11 @@ for subj in subjs:
 
         # subspace pursuit - amplitude
         amp_ctx, fwds, resid = subspace_pursuit(subj, ["ico1", "ico2"], bem,
-                                               epo, cov, trans, [s, s], lambda2,
-                                               fwd0=fwd0, return_as_dipoles=False,
-                                               subjects_dir=subjects_dir, mu=.5,
-                                               cnx=cnx, return_fwds=True, n_jobs=16,
-                                               patch_comp_n=2)
+                                                epo, cov, trans, [s, s], lambda2,
+                                                fwd0=fwd0, return_as_dipoles=False,
+                                                subjects_dir=subjects_dir, mu=.5,
+                                                cnx=cnx, return_fwds=True, n_jobs=n_jobs,
+                                                patch_comp_n=2)
 
         # subcortical
         mix_fwd = mix_patch_forwards(fwds[-1], sub_fwd, epo.info, trans, bem)
@@ -197,22 +201,26 @@ for subj in subjs:
             axes[pp_axes[pp][1]].axis("off")
             axes[pp_axes[pp][1]].set_title("Cortical sources")
 
-            con = sce(data, method="wpli", fmin=4, fmax=8, faverage=True,
-                      sfreq=epo.info["sfreq"], mode=mode, cwt_freqs=cwt_freqs,
-                      cwt_n_cycles=cwt_n_cycles, mt_bandwidth=mt_bandwidth)
-            con_mat = np.squeeze(con.get_data(output="dense"))
-            con_mats.append(con_mat)
+            dpte = epo_dPTE(data, [4, 5, 6, 7], epo.info["sfreq"],
+                            n_cycles=[3, 5, 5, 7], n_jobs=n_jobs)
+            dpte = dpte.mean(axis=0)
+            # fill out the matrix
+            dpte_inv = dpte.copy().T
+            dpte_inv[dpte_inv>0] = 0.5 - (dpte_inv[dpte_inv>0] - 0.5)
+            dpte += dpte_inv
+            np.fill_diagonal(dpte, np.nan)
+            con_mats.append(dpte)
 
         con_max = np.max([cm.max() for cm in con_mats])
         reg_n = len(reg_names)
         for pp_idx, pp in enumerate(preposts):
-            sns.heatmap(con_mats[pp_idx], cmap="inferno", vmin=0, vmax=con_max,
+            sns.heatmap(con_mats[pp_idx], cmap="seismic", vmin=0.49, vmax=.51,
                         ax=axes[pp_axes[pp][3]])
             axes[pp_axes[pp][3]].set_xticks(np.arange(reg_n) + .5,
                                  labels=pp_reg_names[pp_idx], rotation=90, weight="bold")
             axes[pp_axes[pp][3]].set_yticks(np.arange(reg_n) + .5,
                                  labels=pp_reg_names[pp_idx], rotation=0, weight="bold")
-            axes[pp_axes[pp][3]].set_title("wPLI")
+            axes[pp_axes[pp][3]].set_title("dPTE")
 
         # build up a list of areas identified
         for rn in reg_names:
@@ -230,6 +238,7 @@ for subj in subjs:
         plt.tight_layout()
         plt.savefig(join(fig_dir, f"{subj}_{sess}_src-cnx.png"))
         plt.close("all")
+        breakpoint()
 
 
 hit_df = pd.DataFrame.from_dict(hit_df_dict)

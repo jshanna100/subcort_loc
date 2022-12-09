@@ -20,6 +20,5 @@ for rec in recs:
         raw.info["bads"].extend(bad_chans)
     else:
         raw.plot(n_channels=60, duration=120)
-    breakpoint()
     raw.save(join(data_dir, f"MT-YG-{subj}", f"Session{sess}", "EEG",
                   f"MT-YG-{subj}_Session{sess}_{pp}-raw.fif"), overwrite=True)

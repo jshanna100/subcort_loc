@@ -68,6 +68,8 @@ preposts = ["pre", "post"]
 snr = 1.
 lambda2 = 1. / snr ** 2
 
+bursts = True
+
 signal_dict = {"subj":[], "stim":[], "pp":[], "reg":[], "time":[], "amp":[]}
 amp_dict = {"subj":[], "stim":[], "pp":[], "reg":[], "amp":[]}
 cnx_dict = {"subj":[], "stim":[], "pp":[], "from_reg":[], "to_reg":[],
@@ -106,7 +108,8 @@ for subj in subjs:
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
                                   preload=True)
-            #epo.crop(tmin=-.15, tmax=.15)
+            if bursts:
+                epo.crop(tmin=-.25, tmax=.25)
             pp_epos[pp] = epo
             pp_inds[pp] = [pp_epo_idx, pp_epo_idx + len(epo)]
             pp_epo_idx = len(epo)
@@ -115,11 +118,14 @@ for subj in subjs:
         for pp in preposts:
             pp_epos[pp].del_proj()
             pp_epos[pp].info["bads"] = all_bads
-            pp_epos[pp].set_eeg_reference(projection=True)
         epo = mne.concatenate_epochs(list(pp_epos.values()))
 
-        #cov = mne.compute_covariance(epo, keep_sample_mean=False)
-        cov = mne.make_ad_hoc_cov(epo.info)
+        epo.set_eeg_reference(projection=True)
+        epo.apply_proj()
+        if bursts:
+            cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        else:
+            cov = mne.make_ad_hoc_cov(epo.info)
         inst = epo
 
         mix_fwd = mix_patch_forwards(ctx_fwd, sub_fwd, inst.info, trans, bem)
@@ -195,18 +201,22 @@ for subj in subjs:
 
             # connectivity
             reg_names = list(reg_inds.keys())
-            con = sce(these_data, method="wpli", fmin=4, fmax=8, faverage=True,
+            con = sce(these_data, method="wpli", fmin=4, fmax=7, faverage=True,
                       sfreq=epo.info["sfreq"], mt_bandwidth=3.5,
                       indices=cnx_combos)
             wpli_data = np.squeeze(con.get_data())
-            con = sce(these_data, method="dpli", fmin=4, fmax=8, faverage=True,
+            con = sce(these_data, method="dpli", fmin=4, fmax=7, faverage=True,
                       sfreq=epo.info["sfreq"], mt_bandwidth=3.5,
                       indices=cnx_combos)
             dpli_data = np.squeeze(con.get_data())
 
             # dPTE
-            dpte = epo_dPTE(these_data, [4, 5, 6, 7, 8], epo.info["sfreq"],
-                            n_cycles=[3, 5, 7, 7, 7])
+            if bursts:
+                dpte = epo_dPTE(these_data, [4, 5, 6, 7], epo.info["sfreq"],
+                                n_cycles=[1, 2, 3, 3])
+            else:
+                dpte = epo_dPTE(these_data, [4, 5, 6, 7], epo.info["sfreq"],
+                                n_cycles=[3, 5, 7, 7])
             dpte = fill_dpte_mat(dpte.mean(axis=0))
 
             for cnx_idx, (w_cnx, d_cnx) in enumerate(zip(wpli_data, dpli_data)):

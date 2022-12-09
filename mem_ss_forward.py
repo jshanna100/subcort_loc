@@ -23,7 +23,7 @@ sc_names = [f"Left-{x}" for x in sc_base] +  [f"Right-{x}" for x in sc_base]
 n_jobs = 16
 subjects_dir = root_dir + "hdd/freesurfer/subjects"
 spacing = "ico5"
-overwrite = False
+overwrite = True
 
 subjs = listdir(data_dir)
 
@@ -42,7 +42,7 @@ for subj in subjs:
         ctx_src = mne.read_source_spaces(join(subj_dir,
                                               f"{subj}-src.fif"))
         bem = mne.read_bem_solution(join(subj_dir, f"{subj}-bem.fif"))
-        raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre-raw.fif"))
+        raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre_ica-raw.fif"))
 
 
         ctx_fwd = mne.make_forward_solution(raw.info, trans, ctx_src, bem,

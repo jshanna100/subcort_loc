@@ -14,8 +14,14 @@ data_dir = join(root_dir, mem_dir, "02_MemTask")
 subjs = listdir(data_dir)
 preposts = ["pre", "post"]
 
+recs = [[120, 1, "post", ["FT9"]], [125, 1, "post", ["PO4"]],
+        [132, 2, "pre", ["AF7"]], [133, 2, "pre", ["FT7", "FCz"]],
+        [121, 2, "pre", ["AF3", "TP9"]],
+        [121, 2, "post", ["AF3", "TP10", "TP9"]],
+        [144, 1, "post", ["C1", "TP10"]], [142, 1, "post", ["FC1"]]]
+
 overwrite = True
-incl = ["133", "144"]
+incl = ["120", "121", "125", "132", "133", "142", "144"]
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)

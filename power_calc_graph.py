@@ -52,9 +52,8 @@ stim_key = {"MT-YG-120":{"Session1":"active", "Session2":"sham"},
             "MT-YG-147":{"Session1":"sham", "Session2":"active"}
             }
 
-all_dpte = {"active_pre":[], "active_post":[], "sham_pre":[], "sham_post":[]}
-all_wpli = {"active_pre":[], "active_post":[], "sham_pre":[], "sham_post":[]}
-all_dpli = {"active_pre":[], "active_post":[], "sham_pre":[], "sham_post":[]}
+all_stc = {"active_pre":None, "active_post":None, "sham_pre":None, "sham_post":None}
+all_stc_n = {"active_pre":0, "active_post":0, "sham_pre":0, "sham_post":0}
 subjs = listdir(data_dir)
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -67,44 +66,28 @@ for subj in subjs:
         sess_dir = join(subj_dir, sess, "EEG")
         cond = stim_key[subj][sess]
         for pp_idx, pp in enumerate(preposts):
-            dpte = load_sparse(join(sess_dir, f"dPTE_{subj}_{sess}_{pp}.sps"))
-            dpte = dpte.mean(axis=0)
-            all_dpte[f"{cond}_{pp}"].append(dpte)
-            wpli = load_sparse(join(sess_dir, f"wPLI_{subj}_{sess}_{pp}.sps"))
-            all_wpli[f"{cond}_{pp}"].append(wpli)
-            dpli = load_sparse(join(sess_dir, f"dPLI_{subj}_{sess}_{pp}.sps"))
-            all_dpli[f"{cond}_{pp}"].append(dpli)
+            try:
+                stc = mne.read_source_estimate(join(sess_dir,
+                                                    f"{subj}_{sess}_{pp}"))
+            except:
+                continue
+            if all_stc[f"{cond}_{pp}"] is None:
+                all_stc[f"{cond}_{pp}"] = stc
+            else:
+                all_stc[f"{cond}_{pp}"] += stc
+            all_stc_n[f"{cond}_{pp}"] += 1
 
-all_dpte = {k:np.mean(v, axis=0) for k, v in all_dpte.items()}
-all_wpli = {k:np.mean(v, axis=0) for k, v in all_wpli.items()}
-all_dpli = {k:np.mean(v, axis=0) for k, v in all_dpli.items()}
 
+lims = [1e-13, 1.6e-13, 2.25e-13]
+clim = {"kind":"value", "lims":lims}
+#clim = "auto"
 fig, axes = plt.subplots(4, 1, figsize=(21.6, 21.6))
-for idx, (k, v) in enumerate(all_dpte.items()):
-    dpte_b = plot_directed_cnx(v, labels, "RegionGrowing_70",
-                               centre=0.5, top_cnx=150)
-    img = make_brain_image(views, dpte_b, text=f"dPTE {k}", text_pan=0)
+for idx, (k, v) in enumerate(all_stc.items()):
+    v /= all_stc_n[k]
+    brain = v.plot(subject="fsaverage", hemi="both",
+                   clim=clim)
+    img = make_brain_image(views, brain, text=f"{k}", text_pan=0)
     axes[idx].imshow(img)
     axes[idx].axis("off")
 plt.tight_layout()
-fig.savefig(join(fig_dir, "grand_ctx_dpte.png"))
-
-fig, axes = plt.subplots(4, 1, figsize=(21.6, 21.6))
-for idx, (k, v) in enumerate(all_dpli.items()):
-    dpte_b = plot_directed_cnx(v, labels, "RegionGrowing_70",
-                               centre=0.5, top_cnx=150)
-    img = make_brain_image(views, dpte_b, text=f"dPLI {k}", text_pan=0)
-    axes[idx].imshow(img)
-    axes[idx].axis("off")
-plt.tight_layout()
-fig.savefig(join(fig_dir, "grand_ctx_dpli.png"))
-
-fig, axes = plt.subplots(4, 1, figsize=(21.6, 21.6))
-for idx, (k, v) in enumerate(all_wpli.items()):
-    dpte_b = plot_undirected_cnx(v, labels, "RegionGrowing_70",
-                                 top_cnx=75, color="green")
-    img = make_brain_image(views, dpte_b, text=f"wPLI {k}", text_pan=0)
-    axes[idx].imshow(img)
-    axes[idx].axis("off")
-plt.tight_layout()
-fig.savefig(join(fig_dir, "grand_ctx_wpli.png"))
+fig.savefig(join(fig_dir, "grand_ctx_amp.png"))

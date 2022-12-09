@@ -61,7 +61,7 @@ for subj in subjs:
         ctx_src = mne.read_source_spaces(join(subj_dir,
                                               f"{subj}-src.fif"))
         bem = mne.read_bem_solution(join(subj_dir, f"{subj}-bem.fif"))
-        raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre-raw.fif"))
+        raw = mne.io.Raw(join(sess_dir, f"{subj}_{sess}_pre_ica-raw.fif"))
 
         ctx_fwd = make_restricted_forward(subj, comb_labels, bem, raw.info,
                                           trans, subjects_dir=subjects_dir,

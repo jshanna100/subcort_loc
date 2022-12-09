@@ -24,6 +24,8 @@ n_jobs = 8
 fs_labels = mne.read_labels_from_annot("fsaverage", "RegionGrowing_70",
                                        subjects_dir=subjects_dir)
 subjs = listdir(data_dir)
+#subjs = ['MT-YG-135', 'MT-YG-142', 'MT-YG-148', 'MT-YG-147', 'MT-YG-144']
+
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
@@ -39,31 +41,25 @@ for subj in subjs:
                                   subject_from="fsaverage",
                                   subjects_dir=subjects_dir)
         for pp_idx, pp in enumerate(preposts):
-            epo = mne.read_epochs(join(sess_dir,
-                                       f"{subj}_{sess}_{pp}-epo.fif"),
-                                  preload=True)
+            try:
+                epo = mne.read_epochs(join(sess_dir,
+                                           f"{subj}_{sess}_{pp}-epo.fif"),
+                                      preload=True)
+            except:
+                continue
+            epo.set_eeg_reference(projection=True)
             cov = mne.make_ad_hoc_cov(epo.info)
             inv_op = mne.minimum_norm.make_inverse_operator(epo.info, fwd, cov)
             stcs = mne.minimum_norm.apply_inverse_epochs(epo, inv_op, lambda2,
                                                         method=inv_method,
                                                         pick_ori="normal")
-            l_arr = [s.extract_label_time_course(labels, fwd["src"], mode="pca_flip").astype("float32") for s in stcs]
-            l_arr = np.array(l_arr)
-
-            # dPTE
-            dPTE = epo_dPTE(l_arr, [4, 5, 6, 7, 8], epo.info["sfreq"],
-                            n_cycles=[3, 5, 7, 7, 7], n_jobs=n_jobs)
-            dPTE = TriuSparse(dPTE)
-            dPTE.save(join(sess_dir, f"dPTE_{subj}_{sess}_{pp}.sps"))
-
-            con = sce(l_arr, method="wpli", fmin=4, fmax=8, faverage=True,
-                      sfreq=epo.info["sfreq"], mt_bandwidth=3.5)
-            wpli = np.squeeze(con.get_data(output="dense")).T
-            wpli = TriuSparse(wpli)
-            wpli.save(join(sess_dir, f"wPLI_{subj}_{sess}_{pp}.sps"))
-
-            con = sce(l_arr, method="dpli", fmin=4, fmax=8, faverage=True,
-                      sfreq=epo.info["sfreq"], mt_bandwidth=3.5)
-            dpli = np.squeeze(con.get_data(output="dense")).T
-            dpli = TriuSparse(dpli)
-            dpli.save(join(sess_dir, f"dPLI_{subj}_{sess}_{pp}.sps"))
+            samp_n = stcs[0].data.shape[1]
+            l_arr = [np.linalg.norm(stc.data, axis=1, keepdims=True) / samp_n for stc in stcs]
+            l_arr = np.array(l_arr).mean(axis=0)
+            new_stc = stcs[0].copy()
+            new_stc.data = l_arr
+            morph = mne.compute_source_morph(new_stc, subject_from=subj,
+                                             subject_to="fsaverage")
+            new_stc = morph.apply(new_stc)
+            new_stc.save(join(sess_dir, f"{subj}_{sess}_{pp}"), overwrite=True)
+            del l_arr, new_stc
