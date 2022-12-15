@@ -64,6 +64,7 @@ stim_key = {"MT-YG-120":{"Session1":"active", "Session2":"sham"},
 
 subjs = listdir(data_dir)
 preposts = ["pre", "post"]
+exclu = ["MT-YG-124"]
 
 snr = 1.
 lambda2 = 1. / snr ** 2
@@ -78,6 +79,8 @@ cnx_dict = {"subj":[], "stim":[], "pp":[], "from_reg":[], "to_reg":[],
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
+        continue
+    if subj in exclu:
         continue
     subj_dir = join(data_dir, subj)
     try:
@@ -109,7 +112,7 @@ for subj in subjs:
                                        f"{subj}_{sess}_{pp}-epo.fif"),
                                   preload=True)
             if bursts:
-                epo.crop(tmin=-.25, tmax=.25)
+                epo.crop(tmin=-.4, tmax=.4)
             pp_epos[pp] = epo
             pp_inds[pp] = [pp_epo_idx, pp_epo_idx + len(epo)]
             pp_epo_idx = len(epo)
@@ -137,9 +140,10 @@ for subj in subjs:
         # assigns stc indices to regions
         verts = stc[0].vertices
         idx = 0
-        reg_inds = {"frontal-lh":[], "posterior-lh":[],
-                    "frontal-rh":[], "posterior-rh":[],
-                    "hippocampus-lh":[], "hippocampus-rh":[]}
+        reg_inds = {"middlefrontal-lh":[], "superiorfrontal-lh":[],
+                    "temporal-lh":[], "hippocampus-lh":[],
+                    "middlefrontal-rh":[], "superiorfrontal-rh":[],
+                    "temporal-rh":[], "hippocampus-rh":[]}
         for vert_idx, vert in enumerate(verts):
             for vtx in vert:
                 if vert_idx == 0:
@@ -148,14 +152,26 @@ for subj in subjs:
                     reg_name = locate_vertex(vtx, rh_labels).name
                 else:
                     reg_name = ""
-                if "pars" in reg_name and vert_idx == 0:
-                    reg_inds["frontal-lh"].append(idx)
-                elif "pars" in reg_name and vert_idx == 1:
-                    reg_inds["frontal-rh"].append(idx)
-                elif "supra" in reg_name and vert_idx == 0:
-                    reg_inds["posterior-lh"].append(idx)
-                elif "supra" in reg_name and vert_idx == 1:
-                    reg_inds["posterior-rh"].append(idx)
+                # if "pars" in reg_name and vert_idx == 0:
+                #     reg_inds["frontal-lh"].append(idx)
+                # elif "pars" in reg_name and vert_idx == 1:
+                #     reg_inds["frontal-rh"].append(idx)
+                # elif "supra" in reg_name and vert_idx == 0:
+                #     reg_inds["posterior-lh"].append(idx)
+                # elif "supra" in reg_name and vert_idx == 1:
+                #     reg_inds["posterior-rh"].append(idx)
+                if "middlefrontal" in reg_name and vert_idx == 0:
+                    reg_inds["middlefrontal-lh"].append(idx)
+                elif "middlefrontal" in reg_name and vert_idx == 1:
+                    reg_inds["middlefrontal-rh"].append(idx)
+                elif "superiorfrontal" in reg_name and vert_idx == 0:
+                    reg_inds["superiorfrontal-lh"].append(idx)
+                elif "superiorfrontal" in reg_name and vert_idx == 1:
+                    reg_inds["superiorfrontal-rh"].append(idx)
+                elif ("temporal" in reg_name or "entorhinal" in reg_name) and vert_idx == 0:
+                    reg_inds["temporal-lh"].append(idx)
+                elif ("temporal" in reg_name  or "entorhinal" in reg_name) and vert_idx == 1:
+                    reg_inds["temporal-rh"].append(idx)
                 elif vert_idx == 2:
                     reg_inds["hippocampus-lh"].append(idx)
                 elif vert_idx == 3:
@@ -198,7 +214,6 @@ for subj in subjs:
                                       axis=-1), axis=0) / (epo_n + data_n)
                 amp_dict["amp"].append(norm)
 
-
             # connectivity
             reg_names = list(reg_inds.keys())
             con = sce(these_data, method="wpli", fmin=4, fmax=7, faverage=True,
@@ -212,8 +227,8 @@ for subj in subjs:
 
             # dPTE
             if bursts:
-                dpte = epo_dPTE(these_data, [4, 5, 6, 7], epo.info["sfreq"],
-                                n_cycles=[1, 2, 3, 3])
+                dpte = epo_dPTE(these_data, [4, 5, 6, 7, 8], epo.info["sfreq"],
+                                n_cycles=[1, 2, 3, 3, 3])
             else:
                 dpte = epo_dPTE(these_data, [4, 5, 6, 7], epo.info["sfreq"],
                                 n_cycles=[3, 5, 7, 7])

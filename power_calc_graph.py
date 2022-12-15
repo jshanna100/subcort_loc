@@ -52,10 +52,14 @@ stim_key = {"MT-YG-120":{"Session1":"active", "Session2":"sham"},
             "MT-YG-147":{"Session1":"sham", "Session2":"active"}
             }
 
+exclu = ["MT-YG-124"]
+
 all_stc = {"active_pre":None, "active_post":None, "sham_pre":None, "sham_post":None}
 all_stc_n = {"active_pre":0, "active_post":0, "sham_pre":0, "sham_post":0}
 subjs = listdir(data_dir)
 for subj in subjs:
+    if subj in exclu:
+        continue
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
         continue
@@ -78,7 +82,7 @@ for subj in subjs:
             all_stc_n[f"{cond}_{pp}"] += 1
 
 
-lims = [1e-13, 1.6e-13, 2.25e-13]
+lims = [.2e-13, .7e-13, 1.2e-13]
 clim = {"kind":"value", "lims":lims}
 #clim = "auto"
 fig, axes = plt.subplots(4, 1, figsize=(21.6, 21.6))

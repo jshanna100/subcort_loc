@@ -82,6 +82,6 @@ for subj in subjs:
             # finally epoch all theta events
             events = mne.events_from_annotations(raw, event_id={"peak":10})
             epo = mne.Epochs(raw, *events, tmin=-0.5, tmax=0.5, baseline=None,
-                             event_repeated="merge")["peak"]
+                             event_repeated="merge", reject={"eeg":150e-6})["peak"]
             epo.save(join(sess_dir, outfile),
                      overwrite=True)

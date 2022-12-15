@@ -59,12 +59,15 @@ mos_str = """
 snr = 1.
 lambda2 = 1. / snr ** 2
 
+exclu = ["MT-YG-124"]
 hit_df_dict = {"subj":[], "session":[], "reg":[]}
 drop_df_dict = {"subj":[], "session":[], "reg":[]}
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
+        continue
+    if subj in exclu:
         continue
     subj_dir = join(data_dir, subj)
     try:
@@ -100,7 +103,7 @@ for subj in subjs:
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
                                   preload=True)
-            #epo.crop(tmin=-.3, tmax=.3)
+            epo.crop(tmin=-.4, tmax=.4)
             pp_epos[pp] = epo
             pp_inds[pp] = [pp_epo_idx, pp_epo_idx + len(epo)]
             pp_epo_idx = len(epo)
@@ -115,16 +118,18 @@ for subj in subjs:
         if do_cnx:
             cnx = {"method":"wpli", "fmin":4, "fmax":8,
                    "sfreq":epo.info["sfreq"]}
-            cnx = {"freqs":[4, 5, 6, 7], "cycles":[3, 5, 7, 7],
+            cnx = {"freqs":[4, 5, 6, 7, 8], "cycles":[1, 2, 3, 3, 3],
                    "sfreq":epo.info["sfreq"], "n_jobs":n_jobs}
         else:
             cnx = None
-        #cov = mne.compute_covariance(epo, keep_sample_mean=False)
-        cov = mne.make_ad_hoc_cov(epo.info)
+        cov = mne.compute_covariance(epo, keep_sample_mean=False)
+        #cov = mne.make_ad_hoc_cov(epo.info)
+
+        pp_evos = [ppe.average() for ppe in pp_epos.values()]
 
         # subspace pursuit - amplitude
         amp_ctx, fwds, resid = subspace_pursuit(subj, ["ico1", "ico2"], bem,
-                                                epo, cov, trans, [s, s], lambda2,
+                                                pp_evos, cov, trans, [s, s], lambda2,
                                                 fwd0=fwd0, return_as_dipoles=False,
                                                 subjects_dir=subjects_dir, mu=.5,
                                                 cnx=cnx, return_fwds=True, n_jobs=n_jobs,
@@ -132,16 +137,14 @@ for subj in subjs:
 
         # subcortical
         mix_fwd = mix_patch_forwards(fwds[-1], sub_fwd, epo.info, trans, bem)
-        amp_mix, est_fwd, var_expl, resid = subspace_pursuit_level(mix_fwd, epo, cov,
+        amp_mix, est_fwd, var_expl, resid = subspace_pursuit_level(mix_fwd, pp_evos, cov,
                                                                    sub_s, .5, lambda2,
                                                                    cnx=cnx)
-        # unpack and classify everything
-        amp_mix = list(amp_mix)
-        all_data = np.array([ss.data for ss in amp_mix])
-        time_n = all_data.shape[-1]
-        verts = amp_mix[0].vertices
+
         for pp_idx, pp in enumerate(preposts):
-            data = all_data[pp_inds[pp][0]:pp_inds[pp][1]]
+            data = amp_mix[pp_idx].data.copy()
+            time_n = data.shape[-1]
+            verts = amp_mix[pp_idx].vertices
             df_dict = {"Reg":[], "Amp":[], "Time":[]}
             reg_names = []
             data_idx = 0
@@ -160,10 +163,9 @@ for subj in subjs:
                     while reg_name in reg_names:
                         reg_name += "*"
                     reg_names.append(reg_name)
-                    for epo_idx in range(len(data)):
-                        df_dict["Reg"].extend([reg_name] * time_n)
-                        df_dict["Amp"].extend(list(data[epo_idx, data_idx,]))
-                        df_dict["Time"].extend(epo.times)
+                    df_dict["Reg"].extend([reg_name] * time_n)
+                    df_dict["Amp"].extend(list(data[data_idx,]))
+                    df_dict["Time"].extend(epo.times)
                     data_idx += 1
             pp_reg_names.append(reg_names)
 
@@ -201,8 +203,8 @@ for subj in subjs:
             axes[pp_axes[pp][1]].axis("off")
             axes[pp_axes[pp][1]].set_title("Cortical sources")
 
-            dpte = epo_dPTE(data, [4, 5, 6, 7], epo.info["sfreq"],
-                            n_cycles=[3, 5, 5, 7], n_jobs=n_jobs)
+            dpte = epo_dPTE(data[None,], [4, 5, 6, 7, 8], epo.info["sfreq"],
+                            n_cycles=[1, 1, 2, 3, 3], n_jobs=n_jobs)
             dpte = dpte.mean(axis=0)
             # fill out the matrix
             dpte_inv = dpte.copy().T
@@ -214,7 +216,7 @@ for subj in subjs:
         con_max = np.max([cm.max() for cm in con_mats])
         reg_n = len(reg_names)
         for pp_idx, pp in enumerate(preposts):
-            sns.heatmap(con_mats[pp_idx], cmap="seismic", vmin=0.49, vmax=.51,
+            sns.heatmap(con_mats[pp_idx], cmap="seismic", vmin=0.4, vmax=.6,
                         ax=axes[pp_axes[pp][3]])
             axes[pp_axes[pp][3]].set_xticks(np.arange(reg_n) + .5,
                                  labels=pp_reg_names[pp_idx], rotation=90, weight="bold")
@@ -238,7 +240,6 @@ for subj in subjs:
         plt.tight_layout()
         plt.savefig(join(fig_dir, f"{subj}_{sess}_src-cnx.png"))
         plt.close("all")
-        breakpoint()
 
 
 hit_df = pd.DataFrame.from_dict(hit_df_dict)

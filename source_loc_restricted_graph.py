@@ -47,7 +47,7 @@ for stim in ["active", "sham"]:
         sns.lineplot(data=pp_signal, x="time", y="amp", hue="reg",
                      hue_order=reg_names, ax=axes[idx, 0])
         #axes[idx, 0].set_ylim(1e-9, 2.5e-9)
-        axes[idx, 0].set_ylim(2e-9, 7e-9)
+        #axes[idx, 0].set_ylim(2e-9, 7e-9)
         axes[idx, 0].set_title(f"{stim}, {pp}", fontweight="bold")
         wpli = pp_cnx.pivot("from_reg", "to_reg", "wpli")
         sns.heatmap(data=wpli, cmap="inferno", vmin=0, vmax=max_wpli,

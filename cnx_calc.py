@@ -18,15 +18,18 @@ snr = 1.0
 lambda2 = 1.0 / snr ** 2
 
 preposts = ["pre", "post"]
-
+exclu = ["MT-YG-124"]
 n_jobs = 8
 
 fs_labels = mne.read_labels_from_annot("fsaverage", "RegionGrowing_70",
                                        subjects_dir=subjects_dir)
 subjs = listdir(data_dir)
+subjs = ['MT-YG-128', 'MT-YG-134', 'MT-YG-125', 'MT-YG-137', 'MT-YG-138', 'MT-YG-127', 'MT-YG-132', 'MT-YG-139', 'MT-YG-120', 'MT-YG-133', 'MT-YG-140', 'MT-YG-121', 'MT-YG-135', 'MT-YG-142', 'MT-YG-148', 'MT-YG-147', 'MT-YG-144']
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
+        continue
+    if subj in exclu:
         continue
     subj_dir = join(data_dir, subj)
     for sess in listdir(subj_dir):
@@ -42,7 +45,10 @@ for subj in subjs:
             epo = mne.read_epochs(join(sess_dir,
                                        f"{subj}_{sess}_{pp}-epo.fif"),
                                   preload=True)
-            cov = mne.make_ad_hoc_cov(epo.info)
+            epo.set_eeg_reference(projection=True)
+            epo.crop(tmin=-.4, tmax=.4)
+            #cov = mne.make_ad_hoc_cov(epo.info)
+            cov = mne.compute_covariance(epo, keep_sample_mean=False)
             inv_op = mne.minimum_norm.make_inverse_operator(epo.info, fwd, cov)
             stcs = mne.minimum_norm.apply_inverse_epochs(epo, inv_op, lambda2,
                                                         method=inv_method,
@@ -52,7 +58,7 @@ for subj in subjs:
 
             # dPTE
             dPTE = epo_dPTE(l_arr, [4, 5, 6, 7, 8], epo.info["sfreq"],
-                            n_cycles=[3, 5, 7, 7, 7], n_jobs=n_jobs)
+                            n_cycles=[1, 2, 3, 3, 3])
             dPTE = TriuSparse(dPTE)
             dPTE.save(join(sess_dir, f"dPTE_{subj}_{sess}_{pp}.sps"))
 

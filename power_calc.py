@@ -14,8 +14,7 @@ data_dir = join(root_dir, mem_dir, "02_MemTask")
 subjects_dir = root_dir + "hdd/freesurfer/subjects"
 
 inv_method="MNE"
-snr = 1.0
-lambda2 = 1.0 / snr ** 2
+
 
 preposts = ["pre", "post"]
 
@@ -25,6 +24,7 @@ fs_labels = mne.read_labels_from_annot("fsaverage", "RegionGrowing_70",
                                        subjects_dir=subjects_dir)
 subjs = listdir(data_dir)
 #subjs = ['MT-YG-135', 'MT-YG-142', 'MT-YG-148', 'MT-YG-147', 'MT-YG-144']
+bursts = True
 
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
@@ -48,18 +48,34 @@ for subj in subjs:
             except:
                 continue
             epo.set_eeg_reference(projection=True)
-            cov = mne.make_ad_hoc_cov(epo.info)
+            if bursts:
+                snr = 3.
+                epo.crop(tmin=-.3, tmax=.3)
+                cov = mne.compute_covariance(epo, keep_sample_mean=False)
+            else:
+                snr = 1.
+                cov = mne.make_ad_hoc_cov(epo.info)
             inv_op = mne.minimum_norm.make_inverse_operator(epo.info, fwd, cov)
-            stcs = mne.minimum_norm.apply_inverse_epochs(epo, inv_op, lambda2,
-                                                        method=inv_method,
-                                                        pick_ori="normal")
-            samp_n = stcs[0].data.shape[1]
-            l_arr = [np.linalg.norm(stc.data, axis=1, keepdims=True) / samp_n for stc in stcs]
-            l_arr = np.array(l_arr).mean(axis=0)
-            new_stc = stcs[0].copy()
-            new_stc.data = l_arr
+            lambda2 = 1. / snr ** 2
+            if bursts:
+                stc = mne.minimum_norm.apply_inverse(epo.average(), inv_op,
+                                                         lambda2,
+                                                         method=inv_method,
+                                                         pick_ori="normal")
+                samp_n = stc.data.shape[1]
+                l_arr = np.linalg.norm(stc.data, axis=1, keepdims=True) / samp_n
+                new_stc = stc.copy()
+                new_stc.data = l_arr
+            else:
+                stcs = mne.minimum_norm.apply_inverse_epochs(epo, inv_op, lambda2,
+                                                            method=inv_method,
+                                                            pick_ori="normal")
+                samp_n = stcs[0].data.shape[1]
+                l_arr = [np.linalg.norm(stc.data, axis=1, keepdims=True) / samp_n for stc in stcs]
+                l_arr = np.array(l_arr).mean(axis=0)
+                new_stc = stcs[0].copy()
+                new_stc.data = l_arr
             morph = mne.compute_source_morph(new_stc, subject_from=subj,
                                              subject_to="fsaverage")
             new_stc = morph.apply(new_stc)
             new_stc.save(join(sess_dir, f"{subj}_{sess}_{pp}"), overwrite=True)
-            del l_arr, new_stc
