@@ -81,13 +81,40 @@ for subj in subjs:
 
         # make with one source per ROI/patch for doing PA calculations later
         # set up labels for restricted cortical space
-        # label_groups = [["superiorfrontal-lh"],
-        #                 ["rostralmiddlefrontal-lh"],
-        #                 ["middletemporal-lh", "superiortemporal-lh"],
-        #                 ["superiorfrontal-rh"],
-        #                 ["rostralmiddlefrontal-rh"],
-        #                 ["middletemporal-rh", "superiortemporal-rh"]]
-        #
+        label_groups = [["superiorfrontal-lh"],
+                        ["rostralmiddlefrontal-lh"],
+                        ["middletemporal-lh", "superiortemporal-lh"],
+                        ["superiorfrontal-rh"],
+                        ["rostralmiddlefrontal-rh"],
+                        ["middletemporal-rh", "superiortemporal-rh"]]
+
+        labels = mne.read_labels_from_annot(subj, "aparc",
+                                            subjects_dir=subjects_dir)
+        comb_labels = []
+        for lg in label_groups:
+            labs = [lab for lab in labels if lab.name in lg]
+            lab = labs[0]
+            for l in labs[1:]:
+                lab += l
+            comb_labels.append(lab)
+        ctx_fwd = make_restricted_forward(subj, comb_labels, bem, raw.info,
+                                          trans, subjects_dir=subjects_dir,
+                                          n_jobs=16, patch_comp_n=1)
+        mne.write_forward_solution(join(sess_dir,
+                                        f"{subj}_{sess}_restr_1eig-fwd.fif"),
+                                   ctx_fwd, overwrite=True)
+        sub_fwd = make_patch_forward(subj, None, bem, raw.info, trans,
+                                     volume=True, volume_label=sc_names,
+                                     subjects_dir=subjects_dir, n_jobs=16,
+                                     patch_comp_n=1)
+        mne.write_forward_solution(join(sess_dir,
+                                        f"{subj}_{sess}_sub_restr_1eig-fwd.fif"),
+                                   sub_fwd, overwrite=True)
+
+        # label_groups = [["parstriangularis-lh", "parsorbitalis-lh", "parsopercularis-lh"],
+        #                 ["supramarginal-lh"],
+        #                 ["parstriangularis-rh", "parsorbitalis-rh", "parsopercularis-rh"],
+        #                 ["supramarginal-rh"]]
         # labels = mne.read_labels_from_annot(subj, "aparc",
         #                                     subjects_dir=subjects_dir)
         # comb_labels = []
@@ -101,32 +128,5 @@ for subj in subjs:
         #                                   trans, subjects_dir=subjects_dir,
         #                                   n_jobs=16, patch_comp_n=1)
         # mne.write_forward_solution(join(sess_dir,
-        #                                 f"{subj}_{sess}_restr_1eig-fwd.fif"),
+        #                                 f"{subj}_{sess}_restr_roi-fwd.fif"),
         #                            ctx_fwd, overwrite=True)
-        # sub_fwd = make_patch_forward(subj, None, bem, raw.info, trans,
-        #                              volume=True, volume_label=sc_names,
-        #                              subjects_dir=subjects_dir, n_jobs=16,
-        #                              patch_comp_n=1)
-        # mne.write_forward_solution(join(sess_dir,
-        #                                 f"{subj}_{sess}_sub_restr_1eig-fwd.fif"),
-        #                            sub_fwd, overwrite=True)
-
-        label_groups = [["parstriangularis-lh", "parsorbitalis-lh", "parsopercularis-lh"],
-                        ["supramarginal-lh"],
-                        ["parstriangularis-rh", "parsorbitalis-rh", "parsopercularis-rh"],
-                        ["supramarginal-rh"]]
-        labels = mne.read_labels_from_annot(subj, "aparc",
-                                            subjects_dir=subjects_dir)
-        comb_labels = []
-        for lg in label_groups:
-            labs = [lab for lab in labels if lab.name in lg]
-            lab = labs[0]
-            for l in labs[1:]:
-                lab += l
-            comb_labels.append(lab)
-            ctx_fwd = make_restricted_forward(subj, comb_labels, bem, raw.info,
-                                              trans, subjects_dir=subjects_dir,
-                                              n_jobs=16, patch_comp_n=1)
-            mne.write_forward_solution(join(sess_dir,
-                                            f"{subj}_{sess}_restr_roi-fwd.fif"),
-                                       ctx_fwd, overwrite=True)

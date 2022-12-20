@@ -54,7 +54,7 @@ for subj in subjs:
             continue
         sess_dir = join(subj_dir, sess, "EEG")
         trans = join(sess_dir, f"{subj}_{sess}_auto-trans.fif")
-        ctxfwd_file = f"{subj}_{sess}_restr_roi-fwd.fif"
+        ctxfwd_file = f"{subj}_{sess}_restr_1eig-fwd.fif"
         ctx_fwd = mne.read_forward_solution(join(sess_dir, ctxfwd_file))
         # wholectx_fwd_file = f"{subj}_{sess}_ctx-fwd.fif"
         # wholectx_fwd = mne.read_forward_solution(join(sess_dir,
@@ -79,3 +79,12 @@ for subj in subjs:
         sub_gain = mix_fwd["sol"]["data"][:, ctx_n:]
         ctx_ctx.append(fwd_sa(ctx_gain, ctx_gain))
         ctx_sub.append(fwd_sa(sub_gain, ctx_gain))
+
+ctx_ctx = np.array(ctx_ctx).flatten()
+ctx_ctx = ctx_ctx[ctx_ctx>1]
+ctx_sub = np.concatenate([cs.flatten() for cs in ctx_sub])
+
+angles = {"Cortex-Cortex":ctx_ctx, "Cortex-Subcortical":ctx_sub}
+sns.set(font_scale=5)
+ax = sns.histplot(data=angles, stat="percent")
+ax.set_title("Princinple Angle Histogram")

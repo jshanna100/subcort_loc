@@ -128,6 +128,7 @@ for subj in subjs:
         pp_evos = [ppe.average() for ppe in pp_epos.values()]
 
         # subspace pursuit - amplitude
+        fwd0 = None
         amp_ctx, fwds, resid = subspace_pursuit(subj, ["ico1", "ico2"], bem,
                                                 pp_evos, cov, trans, [s, s], lambda2,
                                                 fwd0=fwd0, return_as_dipoles=False,
