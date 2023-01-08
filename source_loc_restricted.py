@@ -66,6 +66,8 @@ subjs = listdir(data_dir)
 preposts = ["pre", "post"]
 exclu = ["MT-YG-124"]
 
+parc = "aparc.a2009s"
+
 snr = 1.
 lambda2 = 1. / snr ** 2
 
@@ -88,7 +90,7 @@ for subj in subjs:
     except:
         print("BEM not found. Skipping...")
         continue
-    labels = mne.read_labels_from_annot(subj, "aparc",
+    labels = mne.read_labels_from_annot(subj, parc,
                                         subjects_dir=subjects_dir)
     lh_labels = [lab for lab in labels if "lh" in lab.name]
     rh_labels = [lab for lab in labels if "rh" in lab.name]
@@ -140,44 +142,44 @@ for subj in subjs:
         # assigns stc indices to regions
         verts = stc[0].vertices
         idx = 0
-        reg_inds = {"middlefrontal-lh":[], "superiorfrontal-lh":[],
-                    "temporal-lh":[], "hippocampus-lh":[],
-                    "middlefrontal-rh":[], "superiorfrontal-rh":[],
-                    "temporal-rh":[], "hippocampus-rh":[]}
+        # reg_inds = {"middlefrontal-lh":[], "superiorfrontal-lh":[],
+        #             "temporal-lh":[], "hippocampus-lh":[],
+        #             "middlefrontal-rh":[], "superiorfrontal-rh":[],
+        #             "temporal-rh":[], "hippocampus-rh":[]}
+        reg_inds = {"G_front_sup-lh":[], "G_front_middle-lh":[],
+                    "G_temporal_middle-lh":[], "hippocampus-lh":[],
+                    "G_front_sup-rh":[], "G_front_middle-rh":[],
+                    "G_temporal_middle-rh":[], "hippocampus-rh":[]}
         for vert_idx, vert in enumerate(verts):
             for vtx in vert:
                 if vert_idx == 0:
                     reg_name = locate_vertex(vtx, lh_labels).name
                 elif vert_idx == 1:
                     reg_name = locate_vertex(vtx, rh_labels).name
-                else:
-                    reg_name = ""
-                # if "pars" in reg_name and vert_idx == 0:
-                #     reg_inds["frontal-lh"].append(idx)
-                # elif "pars" in reg_name and vert_idx == 1:
-                #     reg_inds["frontal-rh"].append(idx)
-                # elif "supra" in reg_name and vert_idx == 0:
-                #     reg_inds["posterior-lh"].append(idx)
-                # elif "supra" in reg_name and vert_idx == 1:
-                #     reg_inds["posterior-rh"].append(idx)
-                if "middlefrontal" in reg_name and vert_idx == 0:
-                    reg_inds["middlefrontal-lh"].append(idx)
-                elif "middlefrontal" in reg_name and vert_idx == 1:
-                    reg_inds["middlefrontal-rh"].append(idx)
-                elif "superiorfrontal" in reg_name and vert_idx == 0:
-                    reg_inds["superiorfrontal-lh"].append(idx)
-                elif "superiorfrontal" in reg_name and vert_idx == 1:
-                    reg_inds["superiorfrontal-rh"].append(idx)
-                elif ("temporal" in reg_name or "entorhinal" in reg_name) and vert_idx == 0:
-                    reg_inds["temporal-lh"].append(idx)
-                elif ("temporal" in reg_name  or "entorhinal" in reg_name) and vert_idx == 1:
-                    reg_inds["temporal-rh"].append(idx)
                 elif vert_idx == 2:
-                    reg_inds["hippocampus-lh"].append(idx)
+                    reg_name = "hippocampus-lh"
                 elif vert_idx == 3:
-                    reg_inds["hippocampus-rh"].append(idx)
-                else:
-                    raise ValueError("Can't identify region.")
+                    reg_name = "hippocampus-rh"
+
+                reg_inds[reg_name].append(idx)
+                # if "middlefrontal" in reg_name and vert_idx == 0:
+                #     reg_inds["middlefrontal-lh"].append(idx)
+                # elif "middlefrontal" in reg_name and vert_idx == 1:
+                #     reg_inds["middlefrontal-rh"].append(idx)
+                # elif "superiorfrontal" in reg_name and vert_idx == 0:
+                #     reg_inds["superiorfrontal-lh"].append(idx)
+                # elif "superiorfrontal" in reg_name and vert_idx == 1:
+                #     reg_inds["superiorfrontal-rh"].append(idx)
+                # elif ("temporal" in reg_name or "entorhinal" in reg_name) and vert_idx == 0:
+                #     reg_inds["temporal-lh"].append(idx)
+                # elif ("temporal" in reg_name  or "entorhinal" in reg_name) and vert_idx == 1:
+                #     reg_inds["temporal-rh"].append(idx)
+                # elif vert_idx == 2:
+                #     reg_inds["hippocampus-lh"].append(idx)
+                # elif vert_idx == 3:
+                #     reg_inds["hippocampus-rh"].append(idx)
+                # else:
+                #     raise ValueError("Can't identify region.")
                 idx += 1
         # grab the strongest singal from each region
         data = np.array([s.data for s in stc])

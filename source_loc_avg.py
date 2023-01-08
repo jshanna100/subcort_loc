@@ -42,7 +42,7 @@ cwt_n_cycles = np.array([3, 5, 5, 5, 7])
 mt_bandwidth = 3.5
 s = 4
 sub_s = 6
-do_cnx = True
+do_cnx = False
 if do_cnx:
     s = int(s/2)
     sub_s = int(sub_s/2)
@@ -63,6 +63,9 @@ exclu = ["MT-YG-124"]
 hit_df_dict = {"subj":[], "session":[], "reg":[]}
 drop_df_dict = {"subj":[], "session":[], "reg":[]}
 
+parc = "aparc.a2009s"
+orig_labels = mne.read_labels_from_annot("fsaverage", parc,
+                                         subjects_dir=subjects_dir)
 for subj in subjs:
     match = re.match("MT-YG-(\d{3})", subj)
     if not match:
@@ -75,8 +78,8 @@ for subj in subjs:
     except:
         continue
     src = mne.read_source_spaces(join(subj_dir, f"{subj}-src.fif"))
-    labels = mne.read_labels_from_annot(subj, "aparc",
-                                        subjects_dir=subjects_dir)
+    labels = mne.morph_labels(orig_labels, subj, "fsaverage",
+                              subjects_dir=subjects_dir)
     lh_labels = [lab for lab in labels if "lh" in lab.name]
     rh_labels = [lab for lab in labels if "rh" in lab.name]
     for sess in listdir(subj_dir):
@@ -244,16 +247,19 @@ for subj in subjs:
 
 
 hit_df = pd.DataFrame.from_dict(hit_df_dict)
-hit_df.to_pickle(join(fig_dir, "hits.pickle"))
+hit_df.to_pickle(join(fig_dir, f"hits_{parc}.pickle"))
 drop_df = pd.DataFrame.from_dict(drop_df_dict)
-drop_df.to_pickle(join(fig_dir, "drops.pickle"))
+drop_df.to_pickle(join(fig_dir, f"drops_{parc}.pickle"))
 
 # plot cortical hits
 regs = hit_df["reg"]
-labels = mne.read_labels_from_annot("fsaverage", "aparc",
+ctx_regs = [reg for reg in regs if "-lh" in reg or "-rh" in reg]
+labels = mne.read_labels_from_annot("fsaverage", parc,
                                     subjects_dir=subjects_dir)
 regs, counts = np.unique(regs, return_counts=True)
-alphas = (counts - counts.min()) / (counts.max() - counts.min())  * 0.8 + 0.2
+ctx_regs, ctx_counts = np.unique(ctx_regs, return_counts=True)
+alphas = ((ctx_counts - ctx_counts.min()) /
+          (ctx_counts.max() - ctx_counts.min())  * 0.8 + 0.2)
 brain = mne.viz.Brain("fsaverage", hemi="both", surf="inflated")
 for reg, alpha in zip(regs, alphas):
     if "-lh" not in reg and "-rh" not in reg:
@@ -275,11 +281,11 @@ sns.countplot(data=hit_df, x="reg", order=reg_order, ax=axes[1])
 plt.xticks(rotation=90, weight="bold")
 axes[1].set_title("All hits")
 plt.tight_layout()
-plt.savefig(join(fig_dir, "hits_distro.png"))
+plt.savefig(join(fig_dir, f"hits_distro_{parc}.png"))
 
 # plot cortical drops
 regs = drop_df["reg"]
-labels = mne.read_labels_from_annot("fsaverage", "aparc",
+labels = mne.read_labels_from_annot("fsaverage", parc,
                                     subjects_dir=subjects_dir)
 regs, counts = np.unique(regs, return_counts=True)
 alphas = (counts - counts.min()) / (counts.max() - counts.min())  * 0.8 + 0.2
@@ -304,4 +310,4 @@ sns.countplot(data=drop_df, x="reg", order=reg_order, ax=axes[1])
 plt.xticks(rotation=90, weight="bold")
 axes[1].set_title("All drops")
 plt.tight_layout()
-plt.savefig(join(fig_dir, "drop_distro.png"))
+plt.savefig(join(fig_dir, f"drop_distro_{parc}.png"))
