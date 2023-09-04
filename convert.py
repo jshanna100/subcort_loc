@@ -17,11 +17,11 @@ def file_to_montage(pos_dir, subj, sess):
     for idx, row in elec_df.iterrows():
         elec_dict[row["Electrode Name"]] = np.array([row["Loc. X"],
                                                      row["Loc. Y"],
-                                                     row["Loc. Z"]])
+                                                     -row["Loc. Z"]])
         elec_dict[row["Electrode Name"]] *= 1e-3
     for idx, row in fid_df.iterrows():
         label = row["Planned Landmark Name"]
-        pos = np.array([row["Loc. X"], row["Loc. Y"], row["Loc. Z"]])
+        pos = np.array([row["Loc. X"], row["Loc. Y"], -row["Loc. Z"]])
         pos *= 1e-3
         if label == "LPA":
             lpa = pos
@@ -38,7 +38,7 @@ def file_to_montage(pos_dir, subj, sess):
 
 overwrite = True
 root_dir = "/home/jev/"
-mem_dir = join(root_dir, "hdd", "memtacs", "pilot")
+mem_dir = join(root_dir, "hdd", "memtacs", "exp")
 data_dir = join(root_dir, mem_dir, "02_MemTask")
 pos_dir = join(root_dir, mem_dir, "01_BrainSight")
 
@@ -49,7 +49,7 @@ subjs = listdir(data_dir)
 success_files = []
 sess_dict = {"Session1":"", "Session2":"2"}
 for subj in subjs:
-    match = re.match("MT-YG-(\d{3})", subj)
+    match = re.match("MT-OG-(\d{3})", subj)
     if not match:
         continue
     subj_dir = join(data_dir, subj)
@@ -83,15 +83,10 @@ for subj in subjs:
             bads = bcf.recommend(raw)
 
             # make VEOG and HEOG channels
-            eog_picks = mne.pick_channels(raw.ch_names,
-                                          ["VEOGu", "HEOGr", "Fp1", "AF7"])
-            eog_data = raw.get_data(eog_picks)
-            new_eog = np.stack([eog_data[0,] - eog_data[2],
-                                eog_data[1,] - eog_data[3]])
-            info = mne.create_info(["VEOG", "HEOG"], raw.info["sfreq"],
-                                   ch_types="eog")
-            eog_raw = mne.io.RawArray(new_eog, info)
-            raw.add_channels([eog_raw], force_update_info=True)
+            raw = mne.set_bipolar_reference(raw, "VEOGu", "Fp1", ch_name="VEOG", drop_refs=False)
+            raw = mne.set_bipolar_reference(raw, "HEOGr", "AF7", ch_name="HEOG", drop_refs=False)
+            raw.set_channel_types({"VEOG":"eog", "HEOG":"eog"})
             raw.drop_channels(["VEOGu", "HEOGr"])
+
             raw.save(join(sess_dir, filename),
                      overwrite=overwrite)

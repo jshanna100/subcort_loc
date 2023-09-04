@@ -8,13 +8,13 @@ Fix the brainsight files so they can be more easily read by MNE-Python
 
 
 root_dir = "/home/jev/"
-data_dir = join(root_dir, "hdd/memtacs/pilot/01_BrainSight")
+data_dir = join(root_dir, "hdd/memtacs/exp/01_BrainSight")
 filenames = listdir(data_dir)
 
 excludes = []
 
 for filename in filenames:
-    match = re.match("MT-YG-(\d{3})_Session(\d).txt", filename)
+    match = re.match("MT-OG-(\d{3})_Session(\d).txt", filename)
     if not match:
         continue
     (subj, sess) = match.groups()
@@ -42,5 +42,5 @@ for filename in filenames:
         lines[v] = lines[v][2:] # Get rid of "# " at beginning
 
     for k, v in line_inds.items():
-        with open(join(data_dir, f"MT-YG-{subj}_Session{sess}_{k}.txt"), "wt") as f:
+        with open(join(data_dir, f"MT-OG-{subj}_Session{sess}_{k}.txt"), "wt") as f:
             f.writelines(lines[v[0]:v[1]])
