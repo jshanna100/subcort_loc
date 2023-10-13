@@ -17,12 +17,6 @@ proc_dir = join(root_dir, "hdd", "memtacs", "proc")
 data_list = listdir(data_dir)
 proc_list = listdir(proc_dir)
 
-label_groups = [["superiorfrontal-lh"],
-                ["rostralmiddlefrontal-lh"],
-                ["middletemporal-lh", "superiortemporal-lh"],
-                ["superiorfrontal-rh"],
-                ["rostralmiddlefrontal-rh"],
-                ["middletemporal-rh", "superiortemporal-rh"]]
 label_groups = [["G_front_sup-lh"],
                 ["G_front_middle-lh"],
                 ["G_temporal_middle-lh"],

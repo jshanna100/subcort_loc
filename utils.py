@@ -2,10 +2,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mne.source_space import (_set_source_space_vertices, setup_source_space,
                               setup_volume_source_space)
-from mne import make_forward_solution, convert_forward_solution
+from mne import make_forward_solution, convert_forward_solution, vertex_to_mni
 from mne.utils.numerics import _PCA
 from mne.io.pick import pick_types, channel_type, _picks_by_type
 from mne.io.constants import FIFF
+import mne
 import pickle
 
 def _whiten_gain(gain, info):
@@ -214,3 +215,15 @@ def fill_dpte_mat(mat):
     tril_inds = np.tril_indices(len(mat), k=-1)
     out_mat[tril_inds] = 0.5 - (mat[triu_inds] - .5)
     return out_mat
+
+def mni_to_vertex(mni_coord, vertices, hemis, subject, subjects_dir=None):
+    coords = vertex_to_mni(vertices, hemis, subject, subjects_dir)
+    dists = np.linalg.norm(mni_coord - coords, axis=-1)
+    idx = np.unravel_index(np.argmin(dists, axis=None), dists.shape)
+    return (idx[0], vertices[idx[0]][idx[1]])
+
+def mni_radius_extract(stc, mni_coord, radius, subject, subjects_dir=None):
+    coords = vertex_to_mni(stc.vertices, [0, 1], subject, subjects_dir)
+    dists = np.hstack(np.linalg.norm(mni_coord - coords, axis=-1))
+    inds = np.where(dists<radius)[0]
+    return stc.data[inds]

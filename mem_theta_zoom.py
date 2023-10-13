@@ -85,3 +85,4 @@ for subj in subjs:
                              event_repeated="merge", reject={"eeg":150e-6})["peak"]
             epo.save(join(sess_dir, outfile),
                      overwrite=True)
+            breakpoint()

@@ -142,10 +142,6 @@ for subj in subjs:
         # assigns stc indices to regions
         verts = stc[0].vertices
         idx = 0
-        # reg_inds = {"middlefrontal-lh":[], "superiorfrontal-lh":[],
-        #             "temporal-lh":[], "hippocampus-lh":[],
-        #             "middlefrontal-rh":[], "superiorfrontal-rh":[],
-        #             "temporal-rh":[], "hippocampus-rh":[]}
         reg_inds = {"G_front_sup-lh":[], "G_front_middle-lh":[],
                     "G_temporal_middle-lh":[], "hippocampus-lh":[],
                     "G_front_sup-rh":[], "G_front_middle-rh":[],
@@ -162,24 +158,7 @@ for subj in subjs:
                     reg_name = "hippocampus-rh"
 
                 reg_inds[reg_name].append(idx)
-                # if "middlefrontal" in reg_name and vert_idx == 0:
-                #     reg_inds["middlefrontal-lh"].append(idx)
-                # elif "middlefrontal" in reg_name and vert_idx == 1:
-                #     reg_inds["middlefrontal-rh"].append(idx)
-                # elif "superiorfrontal" in reg_name and vert_idx == 0:
-                #     reg_inds["superiorfrontal-lh"].append(idx)
-                # elif "superiorfrontal" in reg_name and vert_idx == 1:
-                #     reg_inds["superiorfrontal-rh"].append(idx)
-                # elif ("temporal" in reg_name or "entorhinal" in reg_name) and vert_idx == 0:
-                #     reg_inds["temporal-lh"].append(idx)
-                # elif ("temporal" in reg_name  or "entorhinal" in reg_name) and vert_idx == 1:
-                #     reg_inds["temporal-rh"].append(idx)
-                # elif vert_idx == 2:
-                #     reg_inds["hippocampus-lh"].append(idx)
-                # elif vert_idx == 3:
-                #     reg_inds["hippocampus-rh"].append(idx)
-                # else:
-                #     raise ValueError("Can't identify region.")
+
                 idx += 1
         # grab the strongest singal from each region
         data = np.array([s.data for s in stc])
